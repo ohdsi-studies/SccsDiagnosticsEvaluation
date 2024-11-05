@@ -4,21 +4,33 @@ library(SelfControlledCaseSeries)
 scenarios <- list()
 for (trueRr in c(1, 2, 4)) {
   for (baseLineRate in c(0.01, 0.001, 0.0001)) {
-    rw <- createSimulationRiskWindow(start = 0,
-                                     end = 0,
-                                     endAnchor = "era end",
-                                     relativeRisks = trueRr)
-    settings <- createSccsSimulationSettings(minBaselineRate = baseLineRate / 10,
-                                             maxBaselineRate = baseLineRate,
-                                             eraIds = 1,
-                                             simulationRiskWindows = list(rw),
-                                             includeAgeEffect = FALSE,
-                                             includeSeasonality = FALSE,
-                                             includeCalendarTimeEffect = FALSE)
-    scenario <- list(settings = settings,
-                     trueRr = trueRr,
-                     baselineRate = baseLineRate)
-    scenarios[[length(scenarios) + 1]] <- scenario
+    for (usageRateSlope in c(0, 0.00001, -0.00001)) {
+      rw <- createSimulationRiskWindow(start = 0,
+                                       end = 0,
+                                       endAnchor = "era end",
+                                       relativeRisks = trueRr)
+      if (usageRateSlope > 0) {
+        usageRate <- 0.001
+      } else if (usageRateSlope < 0) {
+        usageRate <- 0.001 - 1000 * usageRateSlope
+      } else {
+        usageRate <- 0.01
+      }
+      settings <- createSccsSimulationSettings(minBaselineRate = baseLineRate / 10,
+                                               maxBaselineRate = baseLineRate,
+                                               eraIds = 1,
+                                               usageRate = usageRate,
+                                               usageRateSlope = usageRateSlope,
+                                               simulationRiskWindows = list(rw),
+                                               includeAgeEffect = FALSE,
+                                               includeSeasonality = FALSE,
+                                               includeCalendarTimeEffect = FALSE)
+      scenario <- list(settings = settings,
+                       trueRr = trueRr,
+                       baselineRate = baseLineRate,
+                       usageRateSlope = usageRateSlope)
+      scenarios[[length(scenarios) + 1]] <- scenario
+    }
   }
 }
 
@@ -27,11 +39,12 @@ writeLines(sprintf("Number of simulation scenarios: %d", length(scenarios)))
 # Run simulations ----------------------------------------------------------------------------------
 folder <- "e:/SccsRareOutcomeSimulations100"
 
-scenario = scenarios[[1]]
+scenario = scenarios[[3]]
 scenario
 simulateOne <- function(seed, scenario) {
   set.seed(seed)
   sccsData <- simulateSccsData(1000, scenario$settings)
+  # sccsData$eras |> filter(eraId == 1) |> count()
   covarSettings <- createEraCovariateSettings(label = "Exposure of interest",
                                               includeEraIds = 1,
                                               stratifyById = FALSE,
@@ -49,8 +62,8 @@ simulateOne <- function(seed, scenario) {
                                     firstOutcomeOnly = TRUE,
                                     naivePeriod = 365)
   sccsIntervalData <- createSccsIntervalData(studyPopulation = studyPop,
-                                              sccsData = sccsData,
-                                              eraCovariateSettings = list(covarSettings, preCovarSettings))
+                                             sccsData = sccsData,
+                                             eraCovariateSettings = list(covarSettings, preCovarSettings))
   model <- fitSccsModel(sccsIntervalData, profileBounds = NULL)
   estimates <- model$estimates
   idx <- which(estimates$covariateId == 1000)
@@ -98,4 +111,4 @@ for (i in seq_along(scenarios)) {
 rows <- bind_rows(rows)
 
 ParallelLogger::stopCluster(cluster)
-readr::write_csv(rows, "SimulationStudies/TemporalStabilityResults.csv")
+readr::write_csv(rows, "SimulationStudies/RareOutcomeResults.csv")
