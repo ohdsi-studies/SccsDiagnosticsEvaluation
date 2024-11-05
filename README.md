@@ -1,19 +1,18 @@
-[Study title]
-=============
+Self-Controlled Case Series objective diagnostics
+=================================================
 
-<img src="https://img.shields.io/badge/Study%20Status-Repo%20Created-lightgray.svg" alt="Study Status: Repo Created">
+<img src="https://img.shields.io/badge/Study%20Status-Started-blue.svg" alt="Study Status: Started">
 
-- Analytics use case(s): **-**
-- Study type: **-**
+- Analytics use case(s): **Population-Level Estimation**
+- Study type: **Methods Research**
 - Tags: **-**
-- Study lead: **-**
-- Study lead forums tag: **[[Lead tag]](https://forums.ohdsi.org/u/[Lead tag])**
-- Study start date: **-**
+- Study lead: **Martijn Schuemie**
+- Study lead forums tag: **[schuemie](https://forums.ohdsi.org/u/schuemie)**
+- Study start date: **October 1, 2024**
 - Study end date: **-**
 - Protocol: **-**
 - Publications: **-**
 - Results explorer: **-**
 
-[Description (single paragraph)]
+Establish and evaluate a comprehensive set of objective diagnostics for the Self-Controlled Case Series(SCCS) design. This study will use both simulation studies and real-world data to evaluate a comprehensive set of diagnostics
 
-[You can add other text at this point]
