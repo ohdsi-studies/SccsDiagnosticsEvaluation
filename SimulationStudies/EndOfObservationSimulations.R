@@ -4,7 +4,7 @@ library(SelfControlledCaseSeries)
 scenarios <- list()
 for (trueRr in c(1, 2, 4)) {
   for (baseLineRate in c(0.001, 0.0001)) {
-    for (usageRateSlope in c(0, 0.00001)) {
+    for (usageRateSlope in c(0, 0.00001, -0.00001)) {
       for (censorType in c("Next week", "Gradual", "First to last", "None")) {
         for (censorStrength in if (censorType == "None") c("None") else c("Weak", "Strong")) {
           rw <- createSimulationRiskWindow(start = 0,
@@ -14,7 +14,7 @@ for (trueRr in c(1, 2, 4)) {
           if (usageRateSlope > 0) {
             usageRate <- 0.001
           } else if (usageRateSlope < 0) {
-            usageRate <- 0.001 - 3000 * usageRateSlope
+            usageRate <- 0.001 - 1000 * usageRateSlope
           } else {
             usageRate <- 0.01
           }
@@ -22,7 +22,7 @@ for (trueRr in c(1, 2, 4)) {
                                                    maxBaselineRate = baseLineRate,
                                                    eraIds = 1,
                                                    patientUsages = 0.8,
-                                                   usageRate = if (usageRateSlope < 0) 0.001 - 3000 * usageRateSlope else 0.001,
+                                                   usageRate = usageRate,
                                                    usageRateSlope = usageRateSlope,
                                                    simulationRiskWindows = list(rw),
                                                    includeAgeEffect = FALSE,
@@ -233,4 +233,4 @@ for (i in seq_along(scenarios)) {
 rows <- bind_rows(rows)
 
 ParallelLogger::stopCluster(cluster)
-readr::write_csv(rows, "SimulationStudies/Results.csv")
+readr::write_csv(rows, "SimulationStudies/EndOfObservationResults.csv")
