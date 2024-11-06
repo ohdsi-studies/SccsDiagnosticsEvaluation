@@ -4,7 +4,7 @@ library(SelfControlledCaseSeries)
 scenarios <- list()
 for (trueRr in c(1, 2, 4)) {
   for (baseLineRate in c(0.001, 0.0001)) {
-    for (usageRateSlope in c(0, 0.00001)) {
+    for (usageRateSlope in c(0, 0.00001, -0.00001)) {
       for (seasonality in c(TRUE, FALSE)) {
         for (calendarTime in c(TRUE, FALSE)) {
           rw <- createSimulationRiskWindow(start = 0,
@@ -14,15 +14,14 @@ for (trueRr in c(1, 2, 4)) {
           if (usageRateSlope > 0) {
             usageRate <- 0.001
           } else if (usageRateSlope < 0) {
-            usageRate <- 0.001 - 3000 * usageRateSlope
+            usageRate <- 0.001 - 1000 * usageRateSlope
           } else {
             usageRate <- 0.01
           }
           settings <- createSccsSimulationSettings(minBaselineRate = baseLineRate / 10,
                                                    maxBaselineRate = baseLineRate,
                                                    eraIds = 1,
-                                                   patientUsages = 0.8,
-                                                   usageRate = if (usageRateSlope < 0) 0.001 - 3000 * usageRateSlope else 0.001,
+                                                   usageRate = usageRate,
                                                    usageRateSlope = usageRateSlope,
                                                    simulationRiskWindows = list(rw),
                                                    includeAgeEffect = FALSE,
@@ -31,6 +30,7 @@ for (trueRr in c(1, 2, 4)) {
           scenario <- list(settings = settings,
                            trueRr = trueRr,
                            baselineRate = baseLineRate,
+                           usageRateSlope = usageRateSlope,
                            seasonality = seasonality,
                            calendarTime = calendarTime)
           scenarios[[length(scenarios) + 1]] <- scenario
@@ -42,7 +42,7 @@ for (trueRr in c(1, 2, 4)) {
 writeLines(sprintf("Number of simulation scenarios: %d", length(scenarios)))
 
 # Run simulations ----------------------------------------------------------------------------------
-folder <- "e:/SccsEdoSimulations100"
+folder <- "e:/SccsTimeStabilitySimulations100"
 
 scenario = scenarios[[11]]
 scenario
@@ -85,6 +85,10 @@ simulateOne <- function(seed, scenario) {
   estimates2 <- model2$estimates
   idx2 <- which(estimates2$covariateId == 1000)
   stability2 <- computeTimeStability(studyPop, model2)
+  if (length(idx2) == 0) {
+    estimates2 <- tibble(logRr = NA, logLb95 = NA, logUb95 = NA)
+    idx2 <- 1
+  }
   
   row <- tibble(logRrUnadj = estimates1$logRr[idx1],
                 ci95LbUnadj = exp(estimates1$logLb95[idx1]),
