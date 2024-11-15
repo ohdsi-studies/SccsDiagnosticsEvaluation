@@ -21,6 +21,7 @@ for (trueRr in c(1, 2, 4)) {
           settings <- createSccsSimulationSettings(minBaselineRate = baseLineRate / 10,
                                                    maxBaselineRate = baseLineRate,
                                                    eraIds = 1,
+                                                   patientUsages = 0.8,
                                                    usageRate = usageRate,
                                                    usageRateSlope = usageRateSlope,
                                                    simulationRiskWindows = list(rw),

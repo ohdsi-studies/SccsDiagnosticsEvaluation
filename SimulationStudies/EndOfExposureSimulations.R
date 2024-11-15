@@ -1,10 +1,11 @@
 # Simulate the effect of exposure ending after the event
 library(SelfControlledCaseSeries)
 
-# Types of censoring:
+# Types of violation of independence between outcome and exposure:
 # - Temporary: Having the event temporarily prevents (re-starting) the exposure
 # - Permanent: Having the event forever prevents (re-starting) the exposure
 # - Permanent when exposed: Having the event during exposure terminates the exposure, and it never comes back
+# - Reverse causality: Having the event increases the probability of having the exposure
 
 
 # Define simulation scenarios ----------------------------------------------------------------------
@@ -13,7 +14,7 @@ scenarios <- list()
 for (trueRr in c(1, 2, 4)) {
   for (baseLineRate in c(0.001, 0.0001)) {
     for (usageRateSlope in c(0, 0.00001, -0.00001)) {
-      for (censorType in c("Temporary", "Permanent", "Permanent when exposed", "None")) {
+      for (censorType in c("Temporary", "Permanent", "Permanent when exposed", "Reverse causality", "None")) {
         for (censorStrength in if (censorType == "None") c("None") else c("Weak", "Strong")) {
           rw <- createSimulationRiskWindow(start = 0,
                                            end = 0,
@@ -29,6 +30,7 @@ for (trueRr in c(1, 2, 4)) {
           settings <- createSccsSimulationSettings(minBaselineRate = baseLineRate / 10,
                                                    maxBaselineRate = baseLineRate,
                                                    eraIds = 1,
+                                                   patientUsages = 0.8,
                                                    usageRate = usageRate,
                                                    usageRateSlope = usageRateSlope,
                                                    meanPrescriptionDurations = 30,
@@ -55,11 +57,26 @@ writeLines(sprintf("Number of simulation scenarios: %d", length(scenarios)))
 # Run simulations ----------------------------------------------------------------------------------
 folder <- "e:/SccsEdeSimulations100"
 
-scenario = scenarios[[6]]
+scenario = scenarios[[7]]
 scenario$censorType
 
 simulateOne <- function(seed, scenario) {
   set.seed(seed)
+  if (scenario$censorType == "Reverse causality") {
+    if (scenario$censorStrength == "Weak") {
+      preIndexMultiplier <- 2
+      postIndexMultiplier <- 1.5
+    } else {
+      preIndexMultiplier <- 5
+      postIndexMultiplier <- 2.5
+    }
+    rw <- scenario$settings$simulationRiskWindows[[1]]
+    rw$start <- -30
+    rw$splitPoints <- c(0)
+    rw$relativeRisks <- c(preIndexMultiplier * 1, postIndexMultiplier * rw$relativeRisks)
+    scenario$settings$simulationRiskWindows[[1]] <- rw
+  }
+  
   sccsData <- simulateSccsData(1000, scenario$settings)
 
   # Merge overlapping eras:
@@ -147,6 +164,10 @@ simulateOne <- function(seed, scenario) {
       filteredExposureEras
     ) |>
       arrange(caseId, eraStartDay)
+  } else if (scenario$censorType == "None" || scenario$censorType == "Reverse causality") {
+    # Do nothing
+  } else {
+    stop("Unknown censoring type: ", scenario$censorType)
   }
   covarSettings <- createEraCovariateSettings(label = "Exposure of interest",
                                               includeEraIds = 1,
@@ -154,19 +175,16 @@ simulateOne <- function(seed, scenario) {
                                               start = 0,
                                               end = 0,
                                               endAnchor = "era end")
-
   preCovarSettings <- createEraCovariateSettings(label = "Pre-exposure",
                                                  includeEraIds = 1,
                                                  stratifyById = FALSE,
-                                                 start = -60,
+                                                 start = -30,
                                                  end = -1,
                                                  endAnchor = "era start")
-
   studyPop <- createStudyPopulation(sccsData = sccsData,
                                     outcomeId = scenario$settings$outcomeId,
                                     firstOutcomeOnly = TRUE,
                                     naivePeriod = 365)
-
   sccsIntervalData <- createSccsIntervalData(studyPopulation = studyPop,
                                              sccsData = sccsData,
                                              eraCovariateSettings = list(covarSettings, preCovarSettings))
@@ -175,22 +193,27 @@ simulateOne <- function(seed, scenario) {
   estimates <- model$estimates
   # estimates
   # x <- sccsData$eras |> collect()
-  studyPopulation = studyPop
+  # studyPopulation = studyPop
   idx1 <- which(estimates$covariateId == 1000)
   idx2 <- which(estimates$covariateId == 1001)
-  p <- computeExposureChange(sccsData, studyPop, 1, ignoreExposureStarts = TRUE)$p
-  p
-  p2 <- computeExposureChange(sccsData, studyPop, 1)$p
-  p2
+  ede <- computeExposureChange(sccsData, studyPop, 1, ignoreExposureStarts = FALSE)
+  ede2 <- computeExposureChange(sccsData, studyPop, 1, ignoreExposureStarts = TRUE)
   # plotExposureCentered(studyPop, sccsData, 1)
   # plotOutcomeCentered(studyPop, sccsData, 1)
-
+  preExposure <- computePreExposureGain(sccsData, studyPop, 1)
+  
   row <- tibble(logRr = estimates$logRr[idx1],
                 ci95Lb = exp(estimates$logLb95[idx1]),
                 ci95Ub = exp(estimates$logUb95[idx1]),
-                diagnosticEstimate = exp(estimates$logRr[idx2]),
-                diagnosticP = p,
-                diagnosticP2 = p2)
+                diagnosticRatio = ede$ratio,
+                diagnosticP = ede$p,
+                diagnostic2Ratio = ede2$ratio,
+                diagnostic2P = ede2$p,
+                preExposureRatio = preExposure$ratio,
+                preExposureP = preExposure$p,
+                preExposureRr = exp(estimates$logRr[idx2]),
+                preExposureLb = exp(estimates$logLb95[idx2]),
+                preExposureUb = exp(estimates$logUb95[idx2]))
   return(row)
 }
 
@@ -215,14 +238,20 @@ for (i in seq_along(scenarios)) {
   }
   metrics <- results |>
     mutate(coverage = ci95Lb < scenario$trueRr & ci95Ub > scenario$trueRr,
-           diagnosticEstimate = log(diagnosticEstimate),
            failDiagnostic = diagnosticP < 0.05,
-           failDiagnostic2 = diagnosticP2 < 0.05) |>
+           failDiagnostic2 = diagnostic2P < 0.05,
+           failPreExposure = preExposureP < 0.05,
+           failPreExposureLb = preExposureLb > 0.05) |>
     summarise(coverage = mean(coverage, na.rm = TRUE),
               bias = mean(logRr - log(scenario$trueRr), na.rm = TRUE),
-              meanDiagnosticEstimate = exp(mean(diagnosticEstimate, na.rm = TRUE)),
+              meanDiagnosticRatio = exp(mean(log(diagnosticRatio), na.rm = TRUE)),
               fractionFailingDiagnostic = mean(failDiagnostic, na.rm = TRUE),
-              fractionFailingDiagnostic2 = mean(failDiagnostic2, na.rm = TRUE))
+              meanDiagnostic2Ratio = exp(mean(log(diagnostic2Ratio), na.rm = TRUE)),
+              fractionFailingDiagnostic2 = mean(failDiagnostic2, na.rm = TRUE),
+              meanPreExposureRatio = exp(mean(log(preExposureRatio), na.rm = TRUE)),
+              fractionFailingPreExposure = mean(failPreExposure, na.rm = TRUE),
+              meanPreExposureRr = exp(mean(log(preExposureRr), na.rm = TRUE)),
+              fractionFailingPreExposureLb = mean(failPreExposureLb, na.rm = TRUE),)
   metrics
   row <- as_tibble(scenarioKey) |>
     bind_cols(metrics)
