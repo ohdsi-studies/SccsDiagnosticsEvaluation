@@ -1,5 +1,10 @@
 library(SelfControlledCaseSeries)
 
+# Types of violation of independence between outcome and observation end (and start):
+# - Next week: A fixed probability of ending observation in the week after the event
+# - Gradual: A constant additional hazard of ending observation from the moment of the first event
+# - First to last: A fixed probability that observation start and end are set to the first and last event/exposure start, resp.
+
 # Define simulation scenarios ----------------------------------------------------------------------
 scenarios <- list()
 for (trueRr in c(1, 2, 4)) {
@@ -109,26 +114,22 @@ simulateOne <- function(seed, scenario) {
   } else {
     stop("Unknown censoring type: ", scenario$censorType)
   }
-
   covarSettings <- createEraCovariateSettings(label = "Exposure of interest",
                                               includeEraIds = 1,
                                               stratifyById = FALSE,
                                               start = 0,
                                               end = 0,
                                               endAnchor = "era end")
-
   preCovarSettings <- createEraCovariateSettings(label = "Pre-exposure",
                                                  includeEraIds = 1,
                                                  stratifyById = FALSE,
                                                  start = -30,
                                                  end = -1,
                                                  endAnchor = "era start")
-
   studyPop <- createStudyPopulation(sccsData = sccsData,
                                     outcomeId = scenario$settings$outcomeId,
                                     firstOutcomeOnly = TRUE,
                                     naivePeriod = 365)
-
   sccsIntervalData <- createSccsIntervalData(studyPopulation = studyPop,
                                              sccsData = sccsData,
                                              eraCovariateSettings = list(covarSettings, preCovarSettings))
@@ -162,18 +163,19 @@ simulateOne <- function(seed, scenario) {
                                                          start = 0,
                                                          end = 0,
                                                          endAnchor = "era end")
-  sccsIntervalData <- createSccsIntervalData(studyPopulation = studyPop,
+  sccsIntervalDataWithInteraction <- createSccsIntervalData(studyPopulation = studyPop,
                                              sccsData = sccsData,
                                              eraCovariateSettings = list(covarSettings, preCovarSettings, interactionCovarSettings),
                                              endOfObservationEraLength = 0)
-
-  model2 <- fitSccsModel(sccsIntervalData, profileBounds = NULL)
-  if (model2$status != "OK") {
-    estimates2 <- tibble(logRr = NA, logLb95 = NA, logUb95 = NA)
-    idx3 <- 1
+  modelWithInteraction <- fitSccsModel(sccsIntervalDataWithInteraction, profileBounds = NULL)
+  if (modelWithInteraction$status != "OK") {
+    interactionEstimate <- tibble(logRr = NA, logLb95 = NA, logUb95 = NA) 
   } else {
-    estimates2 <- model2$estimates
-    idx3 <- which(estimates2$covariateId == 1002)
+    estimates <- modelWithInteraction$estimates
+    idx <- which(estimates$covariateId == 1002)
+    interactionEstimate <- tibble(logRr = estimates$logRr[idx],
+                                  logLb95 = estimates$logLb95[idx], 
+                                  logUb95 = estimates$logUb95[idx]) 
   }
   edo <- computeEventDependentObservation(model)
   exposureStability <- computeExposureStability(studyPop, sccsData, 1)
@@ -184,9 +186,9 @@ simulateOne <- function(seed, scenario) {
                 diagnosticP = edo$p,
                 exposureStabilityEstimate = exposureStability$ratio,
                 exposureStabilityP = exposureStability$p,
-                diagnostic2Estimate = exp(estimates2$logRr[idx3]),
-                diagnostic2Lb = estimates2$logLb95[idx3],
-                diagnostic2Ub = estimates2$logUb95[idx3])
+                diagnostic2Estimate = exp(interactionEstimate$logRr),
+                diagnostic2Lb = exp(interactionEstimate$logLb95),
+                diagnostic2Ub = exp(interactionEstimate$logUb95))
   return(row)
 }
 
@@ -216,15 +218,14 @@ for (i in seq_along(scenarios)) {
            diagnosticEstimate = log(diagnosticEstimate),
            failDiagnostic = diagnosticP < 0.05,
            failDiagnosticAndEs =  diagnosticP < 0.05 & exposureStabilityP < 0.05,
-           diagnostic2Estimate = log(diagnostic2Estimate),
-           failDiagnostic2 = diagnostic2Lb > log(1.25) | diagnostic2Ub < log(0.75)) |>
+           failDiagnostic2 = diagnostic2Lb > 1.25 | diagnostic2Ub < 0.75) |>
     summarise(coverage = mean(coverage, na.rm = TRUE),
               bias = mean(logRr - log(scenario$trueRr), na.rm = TRUE),
               meanDiagnosticEstimate = exp(mean(diagnosticEstimate, na.rm = TRUE)),
               fractionFailingDiagnostic = mean(failDiagnostic, na.rm = TRUE),
               meanExposureStabilityEstimate = exp(mean(log(exposureStabilityEstimate), na.rm = TRUE)),
               fractionFailingDiagnosticAndEs = mean(failDiagnosticAndEs, na.rm = TRUE),
-              meanDiagnostic2Estimate = exp(mean(diagnostic2Estimate, na.rm = TRUE)),
+              meanDiagnostic2Estimate = exp(mean(log(diagnostic2Estimate), na.rm = TRUE)),
               fractionFailingDiagnostic2= mean(failDiagnostic2, na.rm = TRUE))
   row <- as_tibble(scenarioKey) |>
     bind_cols(metrics)
