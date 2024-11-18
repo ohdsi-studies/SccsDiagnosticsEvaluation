@@ -53,13 +53,13 @@ cohorts <- read_csv("RwdExperiments/CohortsToCreate.csv")
 connection <- DatabaseConnector::connect(connectionDetails)
 
 # dbi = 1
-for (dbi in 3:nrow(databases)) {
+for (dbi in 1:nrow(databases)) {
   database <- databases[dbi, ]
   writeLines(sprintf("*** Creating cohorts in %s ***", database$name))
   cohortTableNames <- CohortGenerator::getCohortTableNames(database$cohortTable)
-  # CohortGenerator::createCohortTables(connection = connection,
-  #                                     cohortDatabaseSchema = database$cohortDatabaseSchema,
-  #                                     cohortTableNames = cohortTableNames)
+  CohortGenerator::createCohortTables(connection = connection,
+                                      cohortDatabaseSchema = database$cohortDatabaseSchema,
+                                      cohortTableNames = cohortTableNames)
   counts <- CohortGenerator::generateCohortSet(connection = connection,
                                                cdmDatabaseSchema = database$cdmDatabaseSchema,
                                                cohortDatabaseSchema = database$cohortDatabaseSchema,
@@ -260,7 +260,7 @@ fitAndSaveModel <- function(row, database, folder) {
 cluster <- ParallelLogger::makeCluster(8)
 ParallelLogger::clusterRequire(cluster, "SelfControlledCaseSeries")
 for (dbi in 1:nrow(databases)) {
-  writeLines(sprintf("Creating SccsData objects in %s", database$name))
+  writeLines(sprintf("Fitting models and computing diagnosics in %s", database$name))
   database <- databases[dbi, ]
   rows <- split(targetOutcomes, seq_len(nrow(targetOutcomes)))
   ParallelLogger::clusterApply(cluster, rows, fitAndSaveModel, database = database, folder = folder)
