@@ -27,7 +27,8 @@ for (trueRr in c(1, 2, 4)) {
                                                    simulationRiskWindows = list(rw),
                                                    includeAgeEffect = FALSE,
                                                    includeSeasonality = seasonality,
-                                                   includeCalendarTimeEffect = calendarTime)
+                                                   includeCalendarTimeEffect = calendarTime,
+                                                   calenderTimeMonotonic = TRUE)
           scenario <- list(settings = settings,
                            trueRr = trueRr,
                            baselineRate = baseLineRate,
@@ -90,6 +91,7 @@ simulateOne <- function(seed, scenario) {
     estimates2 <- tibble(logRr = NA, logLb95 = NA, logUb95 = NA)
     idx2 <- 1
   }
+  # plotEventToCalendarTime(studyPop, model2)
   
   row <- tibble(logRrUnadj = estimates1$logRr[idx1],
                 ci95LbUnadj = exp(estimates1$logLb95[idx1]),
