@@ -51,7 +51,7 @@ writeLines(sprintf("Number of simulation scenarios: %d", length(scenarios)))
 # Run simulations ----------------------------------------------------------------------------------
 folder <- "e:/SccsEdoSimulations100"
 
-# x = bind_rows(lapply(as.data.frame, scenarios))
+# x = bind_rows(lapply(scenarios, as.data.frame))
 # which(x$trueRr == 2 & x$baselineRate == 1e-4 & x$usageRateSlope == 0 & x$censorType == "None")
 scenario = scenarios[[70]]
 scenario

@@ -12,41 +12,53 @@ library(SelfControlledCaseSeries)
 
 scenarios <- list()
 for (trueRr in c(1, 2, 4)) {
-  for (baseLineRate in c(0.001, 0.0001)) {
+  # for (baseLineRate in c(0.001, 0.0001)) {
+  for (baseLineRate in c(0.0001)) {
     for (usageRateSlope in c(0, 0.00001, -0.00001)) {
-      for (censorType in c("Temporary", "Permanent", "Permanent when exposed", "Reverse causality", "None")) {
-        for (censorStrength in if (censorType == "None") c("None") else c("Weak", "Strong")) {
-          rw <- createSimulationRiskWindow(start = 0,
-                                           end = 0,
-                                           endAnchor = "era end",
-                                           relativeRisks = trueRr)
-          if (usageRateSlope > 0) {
-            usageRate <- 0.001
-          } else if (usageRateSlope < 0) {
-            usageRate <- 0.001 - 1000 * usageRateSlope
-          } else {
-            usageRate <- 0.01
+      for (uniformAttributableRisk in if (trueRr == 1) c(TRUE) else c(TRUE, FALSE)) {
+        for (censorType in c("Temporary", "Permanent", "Permanent when exposed", "Reverse causality", "None")) {
+          for (censorStrength in if (censorType == "None") c("None") else c("Weak", "Strong")) {
+            if (uniformAttributableRisk) {
+              rw <- createSimulationRiskWindow(start = 0,
+                                               end = 0,
+                                               endAnchor = "era end",
+                                               relativeRisks = trueRr)
+            } else {
+              rw <- createSimulationRiskWindow(start = 0,
+                                               end = 0,
+                                               endAnchor = "era end",
+                                               relativeRisks = c(trueRr*2, trueRr/2),
+                                               splitPoints = 7)
+            }
+            if (usageRateSlope > 0) {
+              usageRate <- 0.001
+            } else if (usageRateSlope < 0) {
+              usageRate <- 0.001 - 1000 * usageRateSlope
+            } else {
+              usageRate <- 0.01
+            }
+            settings <- createSccsSimulationSettings(minBaselineRate = baseLineRate / 10,
+                                                     maxBaselineRate = baseLineRate,
+                                                     eraIds = 1,
+                                                     patientUsages = 0.8,
+                                                     usageRate = usageRate,
+                                                     usageRateSlope = usageRateSlope,
+                                                     meanPrescriptionDurations = 30,
+                                                     sdPrescriptionDurations = 14,
+                                                     simulationRiskWindows = list(rw),
+                                                     includeAgeEffect = FALSE,
+                                                     includeSeasonality = FALSE,
+                                                     includeCalendarTimeEffect = FALSE)
+            scenario <- list(settings = settings,
+                             trueRr = trueRr,
+                             uniformAttributableRisk = uniformAttributableRisk,
+                             baselineRate = baseLineRate,
+                             usageRateSlope = usageRateSlope,
+                             censorType = censorType,
+                             censorStrength = censorStrength)
+            scenarios[[length(scenarios) + 1]] <- scenario
+            
           }
-          settings <- createSccsSimulationSettings(minBaselineRate = baseLineRate / 10,
-                                                   maxBaselineRate = baseLineRate,
-                                                   eraIds = 1,
-                                                   patientUsages = 0.8,
-                                                   usageRate = usageRate,
-                                                   usageRateSlope = usageRateSlope,
-                                                   meanPrescriptionDurations = 30,
-                                                   sdPrescriptionDurations = 14,
-                                                   simulationRiskWindows = list(rw),
-                                                   includeAgeEffect = FALSE,
-                                                   includeSeasonality = FALSE,
-                                                   includeCalendarTimeEffect = FALSE)
-          scenario <- list(settings = settings,
-                           trueRr = trueRr,
-                           baselineRate = baseLineRate,
-                           usageRateSlope = usageRateSlope,
-                           censorType = censorType,
-                           censorStrength = censorStrength)
-          scenarios[[length(scenarios) + 1]] <- scenario
-
         }
       }
     }
@@ -57,8 +69,11 @@ writeLines(sprintf("Number of simulation scenarios: %d", length(scenarios)))
 # Run simulations ----------------------------------------------------------------------------------
 folder <- "e:/SccsEdeSimulations100"
 
-scenario = scenarios[[7]]
-scenario$censorType
+
+# x = bind_rows(lapply(scenarios, as.data.frame))
+# which(x$trueRr == 2 & x$uniformAttributableRisk == FALSE & x$usageRateSlope == 0 & x$censorType == "None")
+scenario = scenarios[[45]]
+scenario
 
 simulateOne <- function(seed, scenario) {
   set.seed(seed)
@@ -78,7 +93,7 @@ simulateOne <- function(seed, scenario) {
   }
   
   sccsData <- simulateSccsData(1000, scenario$settings)
-
+  
   # Merge overlapping eras:
   sccsData$eras <- sccsData$eras |>
     collect() |>
@@ -93,7 +108,7 @@ simulateOne <- function(seed, scenario) {
     ) |>
     select(caseId, eraType, eraId, eraStartDay, eraEndDay) |>
     mutate(eraValue = 1)
-
+  
   outcomeEras <- sccsData$eras |>
     filter(eraType == "hoi") |>
     select(caseId, outcomeDay = eraStartDay)
@@ -120,7 +135,7 @@ simulateOne <- function(seed, scenario) {
     probability <- if_else(scenario$censorStrength == "Strong", 0.8, 0.25)
     outcomeEras <- outcomeEras |>
       filter(runif() > probability)
-
+    
     filteredExposureEras <- sccsData$eras |>
       filter(eraType == "rx") |>
       left_join(outcomeEras, by = join_by(caseId)) |>
@@ -129,7 +144,7 @@ simulateOne <- function(seed, scenario) {
       summarise(outcomeInWindow = any(outcomeInWindow), .groups = "drop") |>
       filter(!outcomeInWindow) |>
       select(-outcomeInWindow)
-
+    
     sccsData$eras <- union_all(
       sccsData$eras |>
         filter(eraType == "hoi"),
@@ -145,7 +160,7 @@ simulateOne <- function(seed, scenario) {
                  by = join_by(caseId, between(outcomeDay, eraStartDay, eraEndDay))) |>
       select(caseId, outcomeDay) |>
       filter(runif() > probability)
-
+    
     filteredExposureEras <- sccsData$eras |>
       filter(eraType == "rx") |>
       left_join(outcomeEras, by = join_by(caseId)) |>
@@ -157,7 +172,7 @@ simulateOne <- function(seed, scenario) {
       filter(!outcomeInWindow) |>
       mutate(eraEndDay = if_else(minOutcomeDay >= eraStartDay & minOutcomeDay < eraEndDay, minOutcomeDay, eraEndDay)) |>
       select(-outcomeInWindow, -minOutcomeDay)
-
+    
     sccsData$eras <- union_all(
       sccsData$eras |>
         filter(eraType == "hoi"),
@@ -188,7 +203,7 @@ simulateOne <- function(seed, scenario) {
   sccsIntervalData <- createSccsIntervalData(studyPopulation = studyPop,
                                              sccsData = sccsData,
                                              eraCovariateSettings = list(covarSettings, preCovarSettings))
-
+  
   model <- fitSccsModel(sccsIntervalData, profileBounds = NULL)
   estimates <- model$estimates
   # estimates
