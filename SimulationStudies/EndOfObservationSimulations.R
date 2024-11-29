@@ -51,7 +51,9 @@ writeLines(sprintf("Number of simulation scenarios: %d", length(scenarios)))
 # Run simulations ----------------------------------------------------------------------------------
 folder <- "e:/SccsEdoSimulations100"
 
-scenario = scenarios[[11]]
+# x = bind_rows(lapply(as.data.frame, scenarios))
+# which(x$trueRr == 2 & x$baselineRate == 1e-4 & x$usageRateSlope == 0 & x$censorType == "None")
+scenario = scenarios[[70]]
 scenario
 simulateOne <- function(seed, scenario) {
   set.seed(seed)
@@ -137,9 +139,10 @@ simulateOne <- function(seed, scenario) {
   model <- fitSccsModel(sccsIntervalData, profileBounds = NULL)
   estimates <- model$estimates
   # estimates
-  idx1 <- which(estimates$covariateId == 1000)
-  idx2 <- which(estimates$covariateId == 99)
-
+  estimate <- estimates |>
+    filter(covariateId == 1000) |>
+    select(logRr, logLb95, logUb95)
+  
   # Create interaction between exposure and censor status:
   censoredCases <- sccsData$cases |>
     filter(noninformativeEndCensor == 0) |>
@@ -171,17 +174,17 @@ simulateOne <- function(seed, scenario) {
   if (modelWithInteraction$status != "OK") {
     interactionEstimate <- tibble(logRr = NA, logLb95 = NA, logUb95 = NA) 
   } else {
-    estimates <- modelWithInteraction$estimates
-    idx <- which(estimates$covariateId == 1002)
-    interactionEstimate <- tibble(logRr = estimates$logRr[idx],
-                                  logLb95 = estimates$logLb95[idx], 
-                                  logUb95 = estimates$logUb95[idx]) 
+    interactionEstimates <- modelWithInteraction$estimates
+    idx <- which(interactionEstimates$covariateId == 1002)
+    interactionEstimate <- tibble(logRr = interactionEstimates$logRr[idx],
+                                  logLb95 = interactionEstimates$logLb95[idx], 
+                                  logUb95 = interactionEstimates$logUb95[idx]) 
   }
   edo <- computeEventDependentObservation(model)
   exposureStability <- computeExposureStability(studyPop, sccsData, 1)
-  row <- tibble(logRr = estimates$logRr[idx1],
-                ci95Lb = exp(estimates$logLb95[idx1]),
-                ci95Ub = exp(estimates$logUb95[idx1]),
+  row <- tibble(logRr = estimate$logRr,
+                ci95Lb = exp(estimate$logLb95),
+                ci95Ub = exp(estimate$logUb95),
                 diagnosticEstimate = edo$ratio,
                 diagnosticP = edo$p,
                 exposureStabilityEstimate = exposureStability$ratio,
