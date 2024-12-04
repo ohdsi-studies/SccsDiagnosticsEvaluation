@@ -46,8 +46,9 @@ writeLines(sprintf("Number of simulation scenarios: %d", length(scenarios)))
 # Run simulations ----------------------------------------------------------------------------------
 folder <- "e:/SccsTimeStabilitySimulations100"
 
-scenario = scenarios[[11]]
+scenario = scenarios[[13]]
 scenario
+seed <- 9
 simulateOne <- function(seed, scenario) {
   set.seed(seed)
   sccsData <- simulateSccsData(1000, scenario$settings)

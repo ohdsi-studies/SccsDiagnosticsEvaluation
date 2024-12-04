@@ -64,24 +64,37 @@ guides <- bind_rows(
 )
 
 vizData <- vizData |>
-  mutate(metric = factor(metric, levels = c("Coverage", "Bias", "Fraction failing diag.", "Mean diag. ratio")))
+  mutate(metric = factor(metric, levels = c("Coverage", "Bias", "Fraction failing diag.", "Mean diag. ratio")),
+         trueRr = as.factor(trueRr))
 guides <- guides |>
   mutate(metric = factor(metric, levels = c("Coverage", "Bias", "Fraction failing diag.", "Mean diag. ratio")))
 
-ggplot(vizData, aes(x = value, y = 1)) +
-  geom_point() +
+strip_theme <- strip_nested(
+  text_y = elem_list_text(angle = c(-90, 0)),
+  by_layer_y = TRUE
+)
+
+ggplot(vizData, aes(x = value, y = 1, color = trueRr)) +
   geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides) +
+  geom_point(alpha = 0.75) +
+  scale_linetype(guide = "none") + 
+  scale_color_manual("True IRR", values = c("1" = "#336B91",
+                                            "2" = "#11A08A",
+                                            "4" = "#EB6622")) + 
+  scale_x_continuous(breaks = c(-0.5, 0, 0.5, 1, 1.5, 2), 
+                     label = c("-0.5", "0", "0.5", "1", "1.5", "2")) +
   scale_y_continuous(breaks = 1) + 
-  facet_nested(temporality + exposureTrend + trueRr ~ metric, scales = "free") +
+  facet_nested(temporality + exposureTrend ~ metric, scales = "free", strip = strip_theme) +
   theme(
-    panel.spacing.y = unit(0, "lines"),
+    panel.spacing.y = unit(0.1, "lines"),
     axis.text.y = element_blank(),
     axis.title = element_blank(),
     axis.ticks.y = element_blank(),
     panel.grid.minor = element_blank(),
-    legend.position = "none"
+    panel.grid.major.y = element_blank(),
+    legend.position = "top"
   )
-ggsave(file.path(folder, "TemporalStabilityResults.png"), width = 7, height = 5)
+ggsave(file.path(folder, "TemporalStabilityResults.png"), width = 7, height = 4.5)
 
 # Adjusted
 vizData <- bind_rows(
@@ -140,22 +153,34 @@ guides <- bind_rows(
 )
 
 vizData <- vizData |>
-  mutate(metric = factor(metric, levels = c("Coverage", "Bias", "Fraction failing diag.", "Mean diag. ratio")))
+  mutate(metric = factor(metric, levels = c("Coverage", "Bias", "Fraction failing diag.", "Mean diag. ratio")),
+         trueRr = as.factor(trueRr))
 guides <- guides |>
   mutate(metric = factor(metric, levels = c("Coverage", "Bias", "Fraction failing diag.", "Mean diag. ratio")))
 
-ggplot(vizData, aes(x = value, y = 1)) +
-  geom_point() +
+strip_theme <- strip_nested(
+  text_y = elem_list_text(angle = c(-90, 0)),
+  by_layer_y = TRUE
+)
+ggplot(vizData, aes(x = value, y = 1, color = trueRr)) +
   geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides) +
+  geom_point(alpha = 0.75) +
+  scale_linetype(guide = "none") + 
+  scale_color_manual("True IRR", values = c("1" = "#336B91",
+                                            "2" = "#11A08A",
+                                            "4" = "#EB6622")) + 
+  scale_x_continuous(breaks = c(-0.5, 0, 0.5, 1, 1.5, 2), 
+                     label = c("-0.5", "0", "0.5", "1", "1.5", "2")) +
   scale_y_continuous(breaks = 1) + 
-  facet_nested(temporality + exposureTrend + trueRr ~ metric, scales = "free") +
+  facet_nested(temporality + exposureTrend ~ metric, scales = "free", strip = strip_theme) +
   theme(
-    panel.spacing.y = unit(0, "lines"),
+    panel.spacing.y = unit(0.1, "lines"),
     axis.text.y = element_blank(),
     axis.title = element_blank(),
     axis.ticks.y = element_blank(),
     panel.grid.minor = element_blank(),
-    legend.position = "none"
+    panel.grid.major.y = element_blank(),
+    legend.position = "top"
   )
 ggsave(file.path(folder, "TemporalStabilityResultsAdjusted.png"), width = 7, height = 5)
 
@@ -207,31 +232,40 @@ guides <- bind_rows(
 )
 
 vizData <- vizData |>
-  mutate(metric = factor(metric, levels = c("Coverage", "Bias", "Fraction failing diag.", "Mean diag. ratio")))
+  mutate(metric = factor(metric, levels = c("Coverage", "Bias", "Fraction failing diag.", "Mean diag. ratio")),
+         trueRr = as.factor(trueRr))
 guides <- guides |>
   mutate(metric = factor(metric, levels = c("Coverage", "Bias", "Fraction failing diag.", "Mean diag. ratio")))
 
-ggplot(vizData, aes(x = value, y = 1)) +
-  geom_point() +
+strip_theme <- strip_nested(
+  text_y = elem_list_text(angle = c(-90, 0)),
+  by_layer_y = TRUE
+)
+ggplot(vizData, aes(x = value, y = 1, color = trueRr)) +
   geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides) +
+  geom_point(alpha = 0.75) +
+  scale_linetype(guide = "none") + 
+  scale_color_manual("True IRR", values = c("1" = "#336B91",
+                                            "2" = "#11A08A",
+                                            "4" = "#EB6622")) + 
+  scale_x_continuous(breaks = c(-0.5, 0, 0.5, 1, 1.5, 2), 
+                     label = c("-0.5", "0", "0.5", "1", "1.5", "2")) +
   scale_y_continuous(breaks = 1) + 
-  facet_nested(baselineRate + exposureTrend + trueRr ~ metric, scales = "free") +
+  facet_nested(baselineRate + exposureTrend ~ metric, scales = "free", strip = strip_theme) +
   theme(
-    panel.spacing.y = unit(0, "lines"),
+    panel.spacing.y = unit(0.1, "lines"),
     axis.text.y = element_blank(),
     axis.title = element_blank(),
     axis.ticks.y = element_blank(),
     panel.grid.minor = element_blank(),
-    legend.position = "none"
+    panel.grid.major.y = element_blank(),
+    legend.position = "top"
   )
-ggsave(file.path(folder, "RareOutcomeResults.png"), width = 7, height = 5)
+
+ggsave(file.path(folder, "RareOutcomeResults.png"), width = 7, height = 3.5)
 
 # End of observation -------------------------------------------------------------------------------
 results <- readr::read_csv(file.path(folder, "EndOfObservationResults.csv"))
-# results <- readr::read_csv(file.path(folder, "EdoSimulations100Clean.csv"))
-# results <- results |>
-#   mutate(coverage = as.numeric(gsub("%", "", coverage)) / 100,
-#          fractionFailingDiagnostic = as.numeric(gsub("%", "", fractionFailingDiagnostic)) / 100)
 
 vizData <- bind_rows(
   results |>
@@ -245,13 +279,15 @@ vizData <- bind_rows(
            value = fractionFailingDiagnostic),
   results |>
     mutate(metric = "Mean diag. ratio",
-           value = meanDiagnosticEstimate) 
+           value = pmin(2, meanDiagnosticEstimate))
 )
 
 vizData <- vizData |>
   mutate(exposureTrend = case_when(usageRateSlope < 0 ~ "Down",
                                    usageRateSlope > 0 ~ "Up",
                                    TRUE ~ "Stable")) |>
+  mutate(censorType = factor(censorType, levels = c("None", "Next week", "Gradual", "First to last")),
+         censorStrength = factor(censorStrength, levels = c("Weak", "Strong", "None"))) |>
   filter(baselineRate == 0.0001)
 
 
@@ -279,23 +315,36 @@ guides <- bind_rows(
 )
 
 vizData <- vizData |>
-  mutate(metric = factor(metric, levels = c("Coverage", "Bias", "Fraction failing diag.", "Mean diag. ratio")))
+  mutate(metric = factor(metric, levels = c("Coverage", "Bias", "Fraction failing diag.", "Mean diag. ratio")),
+         trueRr = as.factor(trueRr))
 guides <- guides |>
   mutate(metric = factor(metric, levels = c("Coverage", "Bias", "Fraction failing diag.", "Mean diag. ratio")))
 
-ggplot(vizData, aes(x = value, y = 1)) +
-  geom_point() +
+strip_theme <- strip_nested(
+  text_y = elem_list_text(angle = c(-90, -90, 0)),
+  by_layer_y = TRUE
+)
+ggplot(vizData, aes(x = value, y = 1, color = trueRr)) +
   geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides) +
+  geom_point(alpha = 0.75) +
+  scale_linetype(guide = "none") + 
+  scale_color_manual("True IRR", values = c("1" = "#336B91",
+                                            "2" = "#11A08A",
+                                            "4" = "#EB6622")) + 
+  scale_x_continuous(breaks = c(-0.5, 0, 0.5, 1, 1.5, 2), 
+                     label = c("-0.5", "0", "0.5", "1", "1.5", "2")) +
   scale_y_continuous(breaks = 1) + 
-  facet_nested(censorType + censorStrength + exposureTrend + trueRr ~ metric, scales = "free") +
+  facet_nested(censorType + censorStrength + exposureTrend ~ metric, scales = "free", strip = strip_theme) +
   theme(
-    panel.spacing.y = unit(0, "lines"),
+    panel.spacing.y = unit(0.1, "lines"),
     axis.text.y = element_blank(),
     axis.title = element_blank(),
     axis.ticks.y = element_blank(),
     panel.grid.minor = element_blank(),
-    legend.position = "none"
+    panel.grid.major.y = element_blank(),
+    legend.position = "top"
   )
+
 ggsave(file.path(folder, "EndOfObservationResults.png"), width = 7, height = 5)
 
 # End of exposure -------------------------------------------------------------------------------
@@ -307,7 +356,7 @@ vizData <- bind_rows(
            value = coverage) ,
   results |>
     mutate(metric = "Bias",
-           value = bias) ,
+           value = pmin(2, bias)) ,
   results |>
     mutate(metric = "Fraction failing diag.",
            value = fractionFailingDiagnostic),
@@ -319,7 +368,8 @@ vizData <- bind_rows(
 vizData <- vizData |>
   mutate(exposureTrend = case_when(usageRateSlope < 0 ~ "Down",
                                    usageRateSlope > 0 ~ "Up",
-                                   TRUE ~ "Stable")) |>
+                                   TRUE ~ "Stable"),
+         uniformAttributableRisk = if_else(uniformAttributableRisk, "Flat", "Peaked")) |>
   filter(baselineRate == 0.0001)
 
 
@@ -347,45 +397,68 @@ guides <- bind_rows(
 )
 
 vizData <- vizData |>
-  mutate(metric = factor(metric, levels = c("Coverage", "Bias", "Fraction failing diag.", "Mean diag. ratio")))
+  mutate(metric = factor(metric, levels = c("Coverage", "Bias", "Fraction failing diag.", "Mean diag. ratio")),
+         trueRr = as.factor(trueRr))
 guides <- guides |>
   mutate(metric = factor(metric, levels = c("Coverage", "Bias", "Fraction failing diag.", "Mean diag. ratio")))
-
 subset <- vizData |> 
   filter(censorType %in% c("None", "Temporary", "Permanent", "Permanent when exposed")) |>
-  mutate(censorType = if_else(censorType == "Permanent when exposed", "Permanent\nwhen exposed", censorType))
-ggplot(subset, aes(x = value, y = 1)) +
-  geom_point() +
+  mutate(censorType = if_else(censorType == "Permanent when exposed", "Permanent\nwhen exposed", censorType)) |>
+  mutate(censorType = factor(censorType, levels = c("None", "Temporary", "Permanent", "Permanent\nwhen exposed")),
+         censorStrength = factor(censorStrength, levels = c("Weak", "Strong", "None")))
+strip_theme <- strip_nested(
+  text_y = elem_list_text(angle = c(-90, -90, 0)),
+  by_layer_y = TRUE
+)
+ggplot(subset, aes(x = value, y = 1, color = trueRr, shape = uniformAttributableRisk)) +
   geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides) +
+  geom_point(alpha = 0.75) +
+  scale_linetype(guide = "none") + 
+  scale_shape_manual("Hazard curve", values = c("Flat" = 16,
+                                         "Peaked" = 17)) +
+  scale_color_manual("True IRR", values = c("1" = "#336B91",
+                                            "2" = "#11A08A",
+                                            "4" = "#EB6622")) + 
+  scale_x_continuous(breaks = c(-0.5, 0, 0.5, 1, 1.5, 2), 
+                     label = c("-0.5", "0", "0.5", "1", "1.5", "2")) +
   scale_y_continuous(breaks = 1) + 
-  facet_nested(censorType + censorStrength + exposureTrend + trueRr ~ metric, scales = "free") +
+  facet_nested(censorType + censorStrength + exposureTrend ~ metric, scales = "free", strip = strip_theme) +
   theme(
-    panel.spacing.y = unit(0, "lines"),
+    panel.spacing.y = unit(0.1, "lines"),
     axis.text.y = element_blank(),
     axis.title = element_blank(),
     axis.ticks.y = element_blank(),
     panel.grid.minor = element_blank(),
-    legend.position = "none"
+    panel.grid.major.y = element_blank(),
+    legend.position = "top"
   )
 ggsave(file.path(folder, "EndOfExposureResultsTemporary.png"), width = 7, height = 5)
 
 subset <- vizData |> 
   filter(censorType %in% c("None", "Reverse causality")) |>
-  mutate(censorType = if_else(censorType == "Permanent when exposed", "Permanent\nwhen exposed", censorType))
-ggplot(subset, aes(x = value, y = 1)) +
-  geom_point() +
+  mutate(censorType = factor(censorType, levels = c("None", "Reverse causality")),
+         censorStrength = factor(censorStrength, levels = c("Weak", "Strong", "None")))
+ggplot(subset, aes(x = value, y = 1, color = trueRr)) +
   geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides) +
+  geom_point(alpha = 0.75) +
+  scale_linetype(guide = "none") + 
+  scale_color_manual("True IRR", values = c("1" = "#336B91",
+                                            "2" = "#11A08A",
+                                            "4" = "#EB6622")) + 
+  scale_x_continuous(breaks = c(-0.5, 0, 0.5, 1, 1.5, 2), 
+                     label = c("-0.5", "0", "0.5", "1", "1.5", "2")) +
   scale_y_continuous(breaks = 1) + 
-  facet_nested(censorType + censorStrength + exposureTrend + trueRr ~ metric, scales = "free") +
+  facet_nested(censorType + censorStrength + exposureTrend ~ metric, scales = "free", strip = strip_theme) +
   theme(
-    panel.spacing.y = unit(0, "lines"),
+    panel.spacing.y = unit(0.1, "lines"),
     axis.text.y = element_blank(),
     axis.title = element_blank(),
     axis.ticks.y = element_blank(),
     panel.grid.minor = element_blank(),
-    legend.position = "none"
+    panel.grid.major.y = element_blank(),
+    legend.position = "top"
   )
-ggsave(file.path(folder, "ReverseCausality.png"), width = 7, height = 5)
+ggsave(file.path(folder, "ReverseCausality.png"), width = 7, height = 3.5)
 
 
 
