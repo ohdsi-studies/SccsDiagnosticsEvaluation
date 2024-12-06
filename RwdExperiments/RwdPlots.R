@@ -34,7 +34,7 @@ guides <- bind_rows(
 ggplot(vizData, aes(x = value, y = database)) +
   geom_point(aes(color = Diagnostic)) +
   geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides, show.legend = FALSE) +
-  facet_grid(example ~ metric) +
+  facet_grid(example ~ metric, scales = "free_x") +
   theme(
     axis.title = element_blank(),
     axis.ticks.y = element_blank(),
@@ -69,7 +69,7 @@ ggplot(vizData, aes(x = value, y = database)) +
     panel.grid.minor = element_blank()
   )
 
-ggsave(file.path(folder, "RareOutcomeResults.png"), width = 7, height = 5)
+ggsave(file.path(folder, "RareOutcomeResults.png"), width = 5, height = 5)
 
 # EDO -------------------------------------------------------------------------------
 vizData <- results |>
@@ -102,7 +102,7 @@ guides <- bind_rows(
 ggplot(vizData, aes(x = value, y = database)) +
   geom_point(aes(color = Diagnostic)) +
   geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides, show.legend = FALSE) +
-  facet_grid(example ~ metric) +
+  facet_grid(example ~ metric, scales = "free_x") +
   theme(
     axis.title = element_blank(),
     axis.ticks.y = element_blank(),
@@ -142,7 +142,7 @@ guides <- bind_rows(
 ggplot(vizData, aes(x = value, y = database)) +
   geom_point(aes(color = Diagnostic)) +
   geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides, show.legend = FALSE) +
-  facet_grid(example ~ metric) +
+  facet_grid(example ~ metric, scales = "free_x") +
   theme(
     axis.title = element_blank(),
     axis.ticks.y = element_blank(),

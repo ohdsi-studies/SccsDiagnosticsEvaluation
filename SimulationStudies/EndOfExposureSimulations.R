@@ -71,8 +71,8 @@ folder <- "e:/SccsEdeSimulations100"
 
 
 # x = bind_rows(lapply(scenarios, as.data.frame))
-# which(x$trueRr == 2 & x$uniformAttributableRisk == FALSE & x$usageRateSlope == 0 & x$censorType == "None")
-scenario = scenarios[[45]]
+# which(x$trueRr == 2 & x$uniformAttributableRisk == TRUE & x$usageRateSlope == -1e-05 & x$censorType == "Permanent when exposed" & x$censorStrength == "Strong")
+scenario = scenarios[[69]]
 scenario
 
 simulateOne <- function(seed, scenario) {
@@ -216,8 +216,10 @@ simulateOne <- function(seed, scenario) {
   # plotExposureCentered(studyPop, sccsData, 1)
   # plotOutcomeCentered(studyPop, sccsData, 1)
   preExposure <- computePreExposureGain(sccsData, studyPop, 1)
-  
-  row <- tibble(logRr = estimates$logRr[idx1],
+  preExposureCount <- model$metaData$covariateStatistics |>
+    filter(covariateId == 1001) |>
+    pull(outcomeCount)
+  row <- tibble(logRr = exp(estimates$logRr[idx1]),
                 ci95Lb = exp(estimates$logLb95[idx1]),
                 ci95Ub = exp(estimates$logUb95[idx1]),
                 diagnosticRatio = ede$ratio,
@@ -228,7 +230,8 @@ simulateOne <- function(seed, scenario) {
                 preExposureP = preExposure$p,
                 preExposureRr = exp(estimates$logRr[idx2]),
                 preExposureLb = exp(estimates$logLb95[idx2]),
-                preExposureUb = exp(estimates$logUb95[idx2]))
+                preExposureUb = exp(estimates$logUb95[idx2]),
+                preExposureCount = preExposureCount)
   return(row)
 }
 
@@ -259,7 +262,8 @@ for (i in seq_along(scenarios)) {
            failPreExposureLb = preExposureLb > 1,
            failPreExposureLb125 = preExposureLb > 1.25,
            failPreExposureUb = preExposureUb < 1,
-           failPreExposureUb125 = preExposureUb < 1/1.25) |>
+           failPreExposureUb125 = preExposureUb < 1/1.25,
+           failPreExposureCount = preExposureCount == 0) |>
     summarise(coverage = mean(coverage, na.rm = TRUE),
               bias = mean(logRr - log(scenario$trueRr), na.rm = TRUE),
               meanDiagnosticRatio = exp(mean(log(diagnosticRatio), na.rm = TRUE)),
@@ -273,7 +277,7 @@ for (i in seq_along(scenarios)) {
               fractionFailingPreExposureLb125 = mean(failPreExposureLb125, na.rm = TRUE),
               fractionFailingPreExposureUb = mean(failPreExposureUb, na.rm = TRUE),
               fractionFailingPreExposureUb125 = mean(failPreExposureUb125, na.rm = TRUE),
-              fractionFailingPreExposure125 = mean(failPreExposureUb125 | failPreExposureLb125, na.rm = TRUE))
+              fractionFailingPreExposure125 = mean(failPreExposureUb125 | failPreExposureLb125 | failPreExposureCount, na.rm = TRUE))
   # metrics
   row <- as_tibble(scenarioKey) |>
     bind_cols(metrics)
