@@ -256,7 +256,10 @@ for (i in seq_along(scenarios)) {
            failDiagnostic = diagnosticP < 0.05,
            failDiagnostic2 = diagnostic2P < 0.05,
            failPreExposure = preExposureP < 0.05,
-           failPreExposureLb = preExposureLb > 0.05) |>
+           failPreExposureLb = preExposureLb > 1,
+           failPreExposureLb125 = preExposureLb > 1.25,
+           failPreExposureUb = preExposureUb < 1,
+           failPreExposureUb125 = preExposureUb < 1/1.25) |>
     summarise(coverage = mean(coverage, na.rm = TRUE),
               bias = mean(logRr - log(scenario$trueRr), na.rm = TRUE),
               meanDiagnosticRatio = exp(mean(log(diagnosticRatio), na.rm = TRUE)),
@@ -266,8 +269,12 @@ for (i in seq_along(scenarios)) {
               meanPreExposureRatio = exp(mean(log(preExposureRatio), na.rm = TRUE)),
               fractionFailingPreExposure = mean(failPreExposure, na.rm = TRUE),
               meanPreExposureRr = exp(mean(log(preExposureRr), na.rm = TRUE)),
-              fractionFailingPreExposureLb = mean(failPreExposureLb, na.rm = TRUE),)
-  metrics
+              fractionFailingPreExposureLb = mean(failPreExposureLb, na.rm = TRUE),
+              fractionFailingPreExposureLb125 = mean(failPreExposureLb125, na.rm = TRUE),
+              fractionFailingPreExposureUb = mean(failPreExposureUb, na.rm = TRUE),
+              fractionFailingPreExposureUb125 = mean(failPreExposureUb125, na.rm = TRUE),
+              fractionFailingPreExposure125 = mean(failPreExposureUb125 | failPreExposureLb125, na.rm = TRUE))
+  # metrics
   row <- as_tibble(scenarioKey) |>
     bind_cols(metrics)
   rows[[length(rows) + 1]] <- row

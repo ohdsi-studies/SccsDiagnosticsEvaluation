@@ -359,10 +359,10 @@ vizData <- bind_rows(
            value = pmin(2, bias)) ,
   results |>
     mutate(metric = "Fraction failing diag.",
-           value = fractionFailingDiagnostic),
+           value = fractionFailingPreExposure125),
   results |>
     mutate(metric = "Mean diag. ratio",
-           value = meanDiagnosticRatio) 
+           value = pmin(2, meanPreExposureRr))
 )
 
 vizData <- vizData |>
