@@ -183,14 +183,19 @@ fitAndSaveModel <- function(row, database, folder) {
       #                      studyPopulation = studyPop,
       #                      exposureEraId = row$targetId)
       
-      if (model$status != "OK" || !1000 %in% model$estimates$covariateId) {
+      if (model$status != "OK" || !1001 %in% model$estimates$covariateId) {
         preExposure2 <- tibble(logRr = NA,
                                logLb95 = NA,
-                               logUb95 = NA)
+                               logUb95 = NA,
+                               count = NA)
       } else {
+        preExposureCount <- model$metaData$covariateStatistics |>
+          filter(covariateId == 1001) |>
+          pull(outcomeCount)
         preExposure2 <- model$estimates |>
-          filter(covariateId == 1000) |>
-          select("logRr", "logLb95", "logUb95")
+          filter(covariateId == 1001) |>
+          select("logRr", "logLb95", "logUb95") |>
+          mutate(count = preExposureCount)
       }
       timeTrend <- computeTimeStability(studyPopulation = studyPop,
                                         sccsModel = model,
@@ -319,6 +324,7 @@ for (dbi in 1:nrow(databases)) {
     row$preExposure2Rr <- exp(diagnostics$preExposure2$logRr)
     row$preExposure2Lb <- exp(diagnostics$preExposure2$logLb95)
     row$preExposure2Ub <- exp(diagnostics$preExposure2$logUb95)
+    row$preExposure2Count <- diagnostics$preExposure2$count
     row$timeTrendRatio <- diagnostics$timeTrend$ratio
     row$timeTrendP <- diagnostics$timeTrend$p
     row$rareProportion <- diagnostics$rareOutcome$outcomeProportion

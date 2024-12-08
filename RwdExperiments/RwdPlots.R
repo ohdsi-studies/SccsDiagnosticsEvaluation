@@ -114,35 +114,32 @@ ggsave(file.path(folder, "EndOfObservationResults.png"), width = 7, height = 5)
 # EDE -------------------------------------------------------------------------------
 vizData <- results |>
   filter(grepl("Permanent contra", diagnostic)) |>
-  mutate(Diagnostic = if_else(edeP < 0.05, "FAIL", "PASS"),
+  mutate(Diagnostic = if_else(preExposure2Lb > 1.25 | preExposure2Ub < 1/1.25 | preExposure2Count == 0, "FAIL", "PASS"),
          example = paste(targetName, outcomeName, sep = " - ")) |>
   mutate(database = factor(database, levels = sort(unique(results$database), decreasing = TRUE)))
 
 vizData <- bind_rows(
   vizData |>
-    mutate(metric = "Diagnostic p-value",
-           value = edeP),
-  vizData |>
     mutate(metric = "Diagnostic ratio",
-           value = edeRatio)
+           value = preExposure2Rr,
+           lb = preExposure2Lb,
+           ub = preExposure2Ub)
 )
 
 guides <- bind_rows(
   tibble(
-    metric = "Diagnostic p-value",
-    x = c(0, 0.05, 1),
-    lt = c("dashed", "solid", "dashed")
-  ),
-  tibble(
     metric = "Diagnostic ratio",
-    x = c(0.5, 1, 2),
+    x = c(1/1.25, 1, 1.25),
     lt = c("solid", "dashed", "solid")
   ),
 )
 ggplot(vizData, aes(x = value, y = database)) +
   geom_point(aes(color = Diagnostic)) +
+  geom_errorbarh(aes(xmin = lb, xmax = ub, color = Diagnostic)) +
   geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides, show.legend = FALSE) +
   facet_grid(example ~ metric, scales = "free_x") +
+  scale_x_log10()+
+  coord_cartesian(xlim = c(0.25, 4)) +
   theme(
     axis.title = element_blank(),
     axis.ticks.y = element_blank(),
@@ -156,39 +153,37 @@ ggsave(file.path(folder, "EndOfExposureResults.png"), width = 7, height = 5)
 # Reverse causality -----------------------------------------------------------------------------
 vizData <- results |>
   filter(grepl("Reverse", diagnostic)) |>
-  mutate(Diagnostic = if_else(preExposureP < 0.05, "FAIL", "PASS"),
+  mutate(Diagnostic = if_else(preExposure2Lb > 1.25 | preExposure2Ub < 1/1.25 | preExposure2Count == 0, "FAIL", "PASS"),
          example = paste(targetName, outcomeName, sep = " - ")) |>
   mutate(database = factor(database, levels = sort(unique(results$database), decreasing = TRUE)))
 
 vizData <- bind_rows(
   vizData |>
-    mutate(metric = "Diagnostic p-value",
-           value = preExposureP),
-  vizData |>
     mutate(metric = "Diagnostic ratio",
-           value = preExposureRatio)
+           value = preExposure2Rr,
+           lb = preExposure2Lb,
+           ub = preExposure2Ub)
 )
 
 guides <- bind_rows(
   tibble(
-    metric = "Diagnostic p-value",
-    x = c(0, 0.05, 1),
-    lt = c("dashed", "solid", "dashed")
-  ),
-  tibble(
     metric = "Diagnostic ratio",
-    x = c(0.5, 1, 2),
+    x = c(1/1.25, 1, 1.25),
     lt = c("solid", "dashed", "solid")
   ),
 )
 ggplot(vizData, aes(x = value, y = database)) +
   geom_point(aes(color = Diagnostic)) +
+  geom_errorbarh(aes(xmin = lb, xmax = ub, color = Diagnostic)) +
   geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides, show.legend = FALSE) +
-  facet_grid(example ~ metric) +
+  facet_grid(example ~ metric, scales = "free_x") +
+  scale_x_log10()+
+  coord_cartesian(xlim = c(0.25, 4)) +
   theme(
     axis.title = element_blank(),
     axis.ticks.y = element_blank(),
     panel.grid.minor = element_blank()
   )
 
-ggsave(file.path(folder, "ReverseCAusalityResults.png"), width = 7, height = 5)
+ggsave(file.path(folder, "ReverseCausalityResults.png"), width = 7, height = 5)
+
