@@ -265,8 +265,8 @@ fitAndSaveModel <- function(row, database, folder) {
 cluster <- ParallelLogger::makeCluster(8)
 ParallelLogger::clusterRequire(cluster, "SelfControlledCaseSeries")
 for (dbi in 1:nrow(databases)) {
-  writeLines(sprintf("Fitting models and computing diagnosics in %s", database$name))
   database <- databases[dbi, ]
+  writeLines(sprintf("Fitting models and computing diagnosics in %s", database$name))
   rows <- split(targetOutcomes, seq_len(nrow(targetOutcomes)))
   ParallelLogger::clusterApply(cluster, rows, fitAndSaveModel, database = database, folder = folder)
 }

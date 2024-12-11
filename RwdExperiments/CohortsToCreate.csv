@@ -449,28 +449,34 @@ DROP TABLE #Codesets;
 	""CensorWindow"" : {}
 }","
 ",FALSE
-14704,14704,[PL] Earliest event of Essential Hypertension,"CREATE TABLE #Codesets (
+3369,3369,[PL] Earliest event of Epilepsy,"CREATE TABLE #Codesets (
   codeset_id int NOT NULL,
   concept_id bigint NOT NULL
 )
 ;
 
 INSERT INTO #Codesets (codeset_id, concept_id)
-SELECT 1 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
+SELECT 0 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
 ( 
-  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (320128,316866)
+  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (4197485,4029498)
 UNION  select c.concept_id
   from @vocabulary_database_schema.CONCEPT c
   join @vocabulary_database_schema.CONCEPT_ANCESTOR ca on c.concept_id = ca.descendant_concept_id
-  and ca.ancestor_concept_id in (320128)
+  and ca.ancestor_concept_id in (4197485,4029498)
   and c.invalid_reason is null
 
 ) I
-) C UNION ALL 
-SELECT 2 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
-( 
-  select concept_id from @vocabulary_database_schema.CONCEPT where 0=1
-) I
+LEFT JOIN
+(
+  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (435875,380533,443700,4202330,37109948,4176652,4044227)
+UNION  select c.concept_id
+  from @vocabulary_database_schema.CONCEPT c
+  join @vocabulary_database_schema.CONCEPT_ANCESTOR ca on c.concept_id = ca.descendant_concept_id
+  and ca.ancestor_concept_id in (435875,380533,443700,4202330,37109948)
+  and c.invalid_reason is null
+
+) E ON I.concept_id = E.concept_id
+WHERE E.concept_id is null
 ) C;
 
 UPDATE STATISTICS #Codesets;
@@ -497,7 +503,7 @@ FROM
 (
   SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
   FROM @cdm_database_schema.CONDITION_OCCURRENCE co
-  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 1)
+  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 0)
 ) C
 
 
@@ -535,7 +541,7 @@ FROM (
   ) MG -- matching groups
 
 ) Results
-
+WHERE Results.ordinal = 1
 ;
 
 
@@ -635,7 +641,8 @@ DROP TABLE #Codesets;
 		""CriteriaList"" : [
 			{
 				""ConditionOccurrence"" : {
-					""CodesetId"" : 1
+					""CodesetId"" : 0,
+					""ConditionTypeExclude"" : false
 				}
 			}
 		],
@@ -649,19 +656,70 @@ DROP TABLE #Codesets;
 	},
 	""ConceptSets"" : [
 		{
-			""id"" : 1,
-			""name"" : ""Essential hypertension"",
+			""id"" : 0,
+			""name"" : ""Epilepsy Seizures excl Alcohol withdrawal-induced convulsion"",
 			""expression"" : {
 				""items"" : [
 					{
 						""concept"" : {
-							""CONCEPT_ID"" : 320128,
-							""CONCEPT_NAME"" : ""Essential hypertension"",
+							""CONCEPT_ID"" : 435875,
+							""CONCEPT_NAME"" : ""Complication of pregnancy, childbirth and/or the puerperium"",
 							""STANDARD_CONCEPT"" : ""S"",
 							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
 							""INVALID_REASON"" : ""V"",
 							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""59621000"",
+							""CONCEPT_CODE"" : ""198609003"",
+							""DOMAIN_ID"" : ""Condition"",
+							""VOCABULARY_ID"" : ""SNOMED"",
+							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
+						},
+						""isExcluded"" : true,
+						""includeDescendants"" : true,
+						""includeMapped"" : false
+					},
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 380533,
+							""CONCEPT_NAME"" : ""Convulsions in the newborn"",
+							""STANDARD_CONCEPT"" : ""S"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""87476004"",
+							""DOMAIN_ID"" : ""Condition"",
+							""VOCABULARY_ID"" : ""SNOMED"",
+							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
+						},
+						""isExcluded"" : true,
+						""includeDescendants"" : true,
+						""includeMapped"" : false
+					},
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 443700,
+							""CONCEPT_NAME"" : ""Eclampsia"",
+							""STANDARD_CONCEPT"" : ""S"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""15938005"",
+							""DOMAIN_ID"" : ""Condition"",
+							""VOCABULARY_ID"" : ""SNOMED"",
+							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
+						},
+						""isExcluded"" : true,
+						""includeDescendants"" : true,
+						""includeMapped"" : false
+					},
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 4197485,
+							""CONCEPT_NAME"" : ""Epileptic seizure"",
+							""STANDARD_CONCEPT"" : ""S"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""313307000"",
 							""DOMAIN_ID"" : ""Condition"",
 							""VOCABULARY_ID"" : ""SNOMED"",
 							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
@@ -672,29 +730,90 @@ DROP TABLE #Codesets;
 					},
 					{
 						""concept"" : {
-							""CONCEPT_ID"" : 316866,
-							""CONCEPT_NAME"" : ""Hypertensive disorder"",
+							""CONCEPT_ID"" : 4029498,
+							""CONCEPT_NAME"" : ""Seizure disorder"",
 							""STANDARD_CONCEPT"" : ""S"",
 							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
 							""INVALID_REASON"" : ""V"",
 							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""38341003"",
+							""CONCEPT_CODE"" : ""128613002"",
 							""DOMAIN_ID"" : ""Condition"",
 							""VOCABULARY_ID"" : ""SNOMED"",
 							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
 						},
 						""isExcluded"" : false,
+						""includeDescendants"" : true,
+						""includeMapped"" : false
+					},
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 4202330,
+							""CONCEPT_NAME"" : ""Alcohol withdrawal-induced convulsion"",
+							""STANDARD_CONCEPT"" : ""S"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""308742005"",
+							""DOMAIN_ID"" : ""Condition"",
+							""VOCABULARY_ID"" : ""SNOMED"",
+							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
+						},
+						""isExcluded"" : true,
+						""includeDescendants"" : true,
+						""includeMapped"" : false
+					},
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 37109948,
+							""CONCEPT_NAME"" : ""Perceptual disturbances and seizures co-occurrent and due to alcohol withdrawal"",
+							""STANDARD_CONCEPT"" : ""S"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""723926008"",
+							""DOMAIN_ID"" : ""Condition"",
+							""VOCABULARY_ID"" : ""SNOMED"",
+							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
+						},
+						""isExcluded"" : true,
+						""includeDescendants"" : true,
+						""includeMapped"" : false
+					},
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 4176652,
+							""CONCEPT_NAME"" : ""Alcohol-induced epilepsy"",
+							""STANDARD_CONCEPT"" : ""S"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""361268000"",
+							""DOMAIN_ID"" : ""Condition"",
+							""VOCABULARY_ID"" : ""SNOMED"",
+							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
+						},
+						""isExcluded"" : true,
+						""includeDescendants"" : false,
+						""includeMapped"" : false
+					},
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 4044227,
+							""CONCEPT_NAME"" : ""Myoclonic epilepsy with ragged red fibers"",
+							""STANDARD_CONCEPT"" : ""S"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""230426003"",
+							""DOMAIN_ID"" : ""Condition"",
+							""VOCABULARY_ID"" : ""SNOMED"",
+							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
+						},
+						""isExcluded"" : true,
 						""includeDescendants"" : false,
 						""includeMapped"" : false
 					}
 				]
-			}
-		},
-		{
-			""id"" : 2,
-			""name"" : ""first condition of interest"",
-			""expression"" : {
-				""items"" : []
 			}
 		}
 	],
@@ -702,7 +821,7 @@ DROP TABLE #Codesets;
 		""Type"" : ""First""
 	},
 	""ExpressionLimit"" : {
-		""Type"" : ""All""
+		""Type"" : ""First""
 	},
 	""InclusionRules"" : [],
 	""CensoringCriteria"" : [],
@@ -711,10 +830,8 @@ DROP TABLE #Codesets;
 		""EraPad"" : 0
 	},
 	""CensorWindow"" : {}
-}","source: 13742;
-hashTag:  ; #epi1073;
-submitter: Joel Swerdel,  
-logic: Earliest event of Essential Hypertension (primary or idiopathic hypertension), indexed on the earliest diagnosis of Essential Hypertension. Cohort exist is the end of continuous observation. ",FALSE
+}","hashTag: #ASSURE, #Indication, #ASSURE-Indication, #Neuroscience
+logic: Earliest occurrence of Epilepsy indexed on diagnosis date; cohort exit is the end of continuous observation.",FALSE
 18885,18885,[mschuemi] Any flu vaccination,"CREATE TABLE #Codesets (
   codeset_id int NOT NULL,
   concept_id bigint NOT NULL
@@ -7161,7 +7278,7 @@ DROP TABLE #Codesets;
 	},
 	""CensorWindow"" : {}
 }",NA,FALSE
-5773,5773,[ASSURE test] Lisinopril exposures,"CREATE TABLE #Codesets (
+7017,7017,"[ASSURE-C] carbamazepine exposures w 0d prior obsv, 30d gap","CREATE TABLE #Codesets (
   codeset_id int NOT NULL,
   concept_id bigint NOT NULL
 )
@@ -7170,11 +7287,11 @@ DROP TABLE #Codesets;
 INSERT INTO #Codesets (codeset_id, concept_id)
 SELECT 0 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
 ( 
-  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (1308216)
+  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (740275)
 UNION  select c.concept_id
   from @vocabulary_database_schema.CONCEPT c
   join @vocabulary_database_schema.CONCEPT_ANCESTOR ca on c.concept_id = ca.descendant_concept_id
-  and ca.ancestor_concept_id in (1308216)
+  and ca.ancestor_concept_id in (740275)
   and c.invalid_reason is null
 
 ) I
@@ -7429,18 +7546,18 @@ DROP TABLE #Codesets;
 	""ConceptSets"" : [
 		{
 			""id"" : 0,
-			""name"" : ""[ASSURE test] lisinopril"",
+			""name"" : ""Assure Exposure - C - carbamazepine"",
 			""expression"" : {
 				""items"" : [
 					{
 						""concept"" : {
-							""CONCEPT_ID"" : 1308216,
-							""CONCEPT_NAME"" : ""lisinopril"",
+							""CONCEPT_ID"" : 740275,
+							""CONCEPT_NAME"" : ""carbamazepine"",
 							""STANDARD_CONCEPT"" : ""S"",
 							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
 							""INVALID_REASON"" : ""V"",
 							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""29046"",
+							""CONCEPT_CODE"" : ""2002"",
 							""DOMAIN_ID"" : ""Drug"",
 							""VOCABULARY_ID"" : ""RxNorm"",
 							""CONCEPT_CLASS_ID"" : ""Ingredient""
@@ -13983,31 +14100,31 @@ DROP TABLE #Codesets;
 	},
 	""CensorWindow"" : {}
 }",NA,FALSE
-18881,18881,[mschuemi] Angioedema for SCCS,"CREATE TABLE #Codesets (
+10711,10711,"[PL] Earliest event of Stevens-Johnson syndrome, Toxic epidermal necrolysis spectrum (TEN), IP or ER","CREATE TABLE #Codesets (
   codeset_id int NOT NULL,
   concept_id bigint NOT NULL
 )
 ;
 
 INSERT INTO #Codesets (codeset_id, concept_id)
-SELECT 3 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
+SELECT 2 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
 ( 
-  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (4296370,432791,4297361,4270861)
+  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (35625857)
 UNION  select c.concept_id
   from @vocabulary_database_schema.CONCEPT c
   join @vocabulary_database_schema.CONCEPT_ANCESTOR ca on c.concept_id = ca.descendant_concept_id
-  and ca.ancestor_concept_id in (4296370,432791,4297361,4270861)
+  and ca.ancestor_concept_id in (35625857)
   and c.invalid_reason is null
 
 ) I
 ) C UNION ALL 
-SELECT 10 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
+SELECT 3 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
 ( 
-  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (4296370,432791)
+  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (262,9203,9201)
 UNION  select c.concept_id
   from @vocabulary_database_schema.CONCEPT c
   join @vocabulary_database_schema.CONCEPT_ANCESTOR ca on c.concept_id = ca.descendant_concept_id
-  and ca.ancestor_concept_id in (4296370,432791)
+  and ca.ancestor_concept_id in (262,9203,9201)
   and c.invalid_reason is null
 
 ) I
@@ -14037,7 +14154,7 @@ FROM
 (
   SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
   FROM @cdm_database_schema.CONDITION_OCCURRENCE co
-  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 3)
+  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 2)
 ) C
 
 
@@ -14078,20 +14195,20 @@ select 0 as index_id, cc.person_id, cc.event_id
 from (SELECT p.person_id, p.event_id 
 FROM #qualified_events P
 JOIN (
-  -- Begin Condition Occurrence Criteria
-SELECT C.person_id, C.condition_occurrence_id as event_id, C.start_date, C.end_date,
-  C.visit_occurrence_id, C.start_date as sort_date
-FROM 
+  -- Begin Visit Occurrence Criteria
+select C.person_id, C.visit_occurrence_id as event_id, C.start_date, C.end_date,
+       C.visit_occurrence_id, C.start_date as sort_date
+from 
 (
-  SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
-  FROM @cdm_database_schema.CONDITION_OCCURRENCE co
-  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 10)
+  select vo.person_id,vo.visit_occurrence_id,vo.visit_concept_id,vo.visit_start_date as start_date, vo.visit_end_date as end_date 
+  FROM @cdm_database_schema.VISIT_OCCURRENCE vo
+JOIN #Codesets cs on (vo.visit_concept_id = cs.concept_id and cs.codeset_id = 3)
 ) C
 
 
--- End Condition Occurrence Criteria
+-- End Visit Occurrence Criteria
 
-) A on A.person_id = P.person_id  AND A.START_DATE >= P.OP_START_DATE AND A.START_DATE <= P.OP_END_DATE AND A.START_DATE >= DATEADD(day,0,P.START_DATE) AND A.START_DATE <= DATEADD(day,3,P.START_DATE) ) cc 
+) A on A.person_id = P.person_id  AND A.START_DATE >= P.OP_START_DATE AND A.START_DATE <= P.OP_END_DATE AND A.START_DATE >= P.OP_START_DATE AND A.START_DATE <= DATEADD(day,0,P.START_DATE) AND A.END_DATE >= DATEADD(day,0,P.START_DATE) AND A.END_DATE <= P.OP_END_DATE ) cc 
 GROUP BY cc.person_id, cc.event_id
 HAVING COUNT(cc.event_id) >= 1
 -- End Correlated Criteria
@@ -14128,7 +14245,7 @@ FROM (
   WHERE (MG.inclusion_rule_mask = POWER(cast(2 as bigint),1)-1)
 
 ) Results
-
+WHERE Results.ordinal = 1
 ;
 
 -- date offset strategy
@@ -14237,7 +14354,8 @@ DROP TABLE #Codesets;
 		""CriteriaList"" : [
 			{
 				""ConditionOccurrence"" : {
-					""CodesetId"" : 3
+					""CodesetId"" : 2,
+					""ConditionTypeExclude"" : false
 				}
 			}
 		],
@@ -14251,70 +14369,19 @@ DROP TABLE #Codesets;
 	},
 	""ConceptSets"" : [
 		{
-			""id"" : 3,
-			""name"" : ""Angioedema or urticaria"",
+			""id"" : 2,
+			""name"" : ""Stevens-Johnson syndrome or TEN"",
 			""expression"" : {
 				""items"" : [
 					{
 						""concept"" : {
-							""CONCEPT_ID"" : 4296370,
-							""CONCEPT_NAME"" : ""Cutis laxa following urticaria-angioedema"",
+							""CONCEPT_ID"" : 35625857,
+							""CONCEPT_NAME"" : ""Stevens-Johnson syndrome, toxic epidermal necrolysis spectrum"",
 							""STANDARD_CONCEPT"" : ""S"",
 							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
 							""INVALID_REASON"" : ""V"",
 							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""403398009"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : true,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 432791,
-							""CONCEPT_NAME"" : ""Angioedema"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""41291007"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : true,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 4297361,
-							""CONCEPT_NAME"" : ""Angioedema and/or urticaria"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""404177007"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : true,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 4270861,
-							""CONCEPT_NAME"" : ""Allergic angioedema"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""402387002"",
+							""CONCEPT_CODE"" : ""768946000"",
 							""DOMAIN_ID"" : ""Condition"",
 							""VOCABULARY_ID"" : ""SNOMED"",
 							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
@@ -14327,22 +14394,22 @@ DROP TABLE #Codesets;
 			}
 		},
 		{
-			""id"" : 10,
-			""name"" : ""Angioedema"",
+			""id"" : 3,
+			""name"" : ""Emergency room or Inpatient Visit"",
 			""expression"" : {
 				""items"" : [
 					{
 						""concept"" : {
-							""CONCEPT_ID"" : 4296370,
-							""CONCEPT_NAME"" : ""Cutis laxa following urticaria-angioedema"",
+							""CONCEPT_ID"" : 262,
+							""CONCEPT_NAME"" : ""Emergency Room and Inpatient Visit"",
 							""STANDARD_CONCEPT"" : ""S"",
 							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
 							""INVALID_REASON"" : ""V"",
 							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""403398009"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
+							""CONCEPT_CODE"" : ""ERIP"",
+							""DOMAIN_ID"" : ""Visit"",
+							""VOCABULARY_ID"" : ""Visit"",
+							""CONCEPT_CLASS_ID"" : ""Visit""
 						},
 						""isExcluded"" : false,
 						""includeDescendants"" : true,
@@ -14350,16 +14417,33 @@ DROP TABLE #Codesets;
 					},
 					{
 						""concept"" : {
-							""CONCEPT_ID"" : 432791,
-							""CONCEPT_NAME"" : ""Angioedema"",
+							""CONCEPT_ID"" : 9203,
+							""CONCEPT_NAME"" : ""Emergency Room Visit"",
 							""STANDARD_CONCEPT"" : ""S"",
 							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
 							""INVALID_REASON"" : ""V"",
 							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""41291007"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
+							""CONCEPT_CODE"" : ""ER"",
+							""DOMAIN_ID"" : ""Visit"",
+							""VOCABULARY_ID"" : ""Visit"",
+							""CONCEPT_CLASS_ID"" : ""Visit""
+						},
+						""isExcluded"" : false,
+						""includeDescendants"" : true,
+						""includeMapped"" : false
+					},
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 9201,
+							""CONCEPT_NAME"" : ""Inpatient Visit"",
+							""STANDARD_CONCEPT"" : ""S"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""IP"",
+							""DOMAIN_ID"" : ""Visit"",
+							""VOCABULARY_ID"" : ""Visit"",
+							""CONCEPT_CLASS_ID"" : ""Visit""
 						},
 						""isExcluded"" : false,
 						""includeDescendants"" : true,
@@ -14373,31 +14457,42 @@ DROP TABLE #Codesets;
 		""Type"" : ""All""
 	},
 	""ExpressionLimit"" : {
-		""Type"" : ""All""
+		""Type"" : ""First""
 	},
 	""InclusionRules"" : [
 		{
-			""name"" : ""Angioedema within 3 days  "",
+			""name"" : ""Visit is Inpatient or Emergency Room"",
 			""expression"" : {
 				""Type"" : ""ALL"",
 				""CriteriaList"" : [
 					{
 						""Criteria"" : {
-							""ConditionOccurrence"" : {
-								""CodesetId"" : 10
+							""VisitOccurrence"" : {
+								""CodesetId"" : 3,
+								""VisitTypeExclude"" : false
 							}
 						},
 						""StartWindow"" : {
 							""Start"" : {
-								""Days"" : 0,
 								""Coeff"" : -1
 							},
 							""End"" : {
-								""Days"" : 3,
-								""Coeff"" : 1
+								""Days"" : 0,
+								""Coeff"" : -1
 							},
 							""UseIndexEnd"" : false,
 							""UseEventEnd"" : false
+						},
+						""EndWindow"" : {
+							""Start"" : {
+								""Days"" : 0,
+								""Coeff"" : 1
+							},
+							""End"" : {
+								""Coeff"" : 1
+							},
+							""UseIndexEnd"" : false,
+							""UseEventEnd"" : true
 						},
 						""RestrictVisit"" : false,
 						""IgnoreObservationPeriod"" : false,
@@ -14425,4 +14520,8 @@ DROP TABLE #Codesets;
 		""EraPad"" : 0
 	},
 	""CensorWindow"" : {}
-}",NA,FALSE
+}","source: O222, 9967
+hashTag: #ASSURE, #Outcome, #ASSURE-Outcome, #DME;
+submitter: Gowtham A. Rao, Azza A Shoaibi, Dmytro Dymshyts 
+ohdsi: Pending
+logic: Earliest event of Stevens-Johnson syndrome, Toxic epidermal necrolysis spectrum, indexed on diagnosis of Stevens-Johnson syndrome, Toxic epidermal necrolysis spectrum.  Restricting to events overlapping an inpatient or ER visit. Cohort exist is 1 day post cohort end date. ",FALSE
