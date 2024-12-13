@@ -449,389 +449,6 @@ DROP TABLE #Codesets;
 	""CensorWindow"" : {}
 }","
 ",FALSE
-3369,3369,[PL] Earliest event of Epilepsy,"CREATE TABLE #Codesets (
-  codeset_id int NOT NULL,
-  concept_id bigint NOT NULL
-)
-;
-
-INSERT INTO #Codesets (codeset_id, concept_id)
-SELECT 0 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
-( 
-  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (4197485,4029498)
-UNION  select c.concept_id
-  from @vocabulary_database_schema.CONCEPT c
-  join @vocabulary_database_schema.CONCEPT_ANCESTOR ca on c.concept_id = ca.descendant_concept_id
-  and ca.ancestor_concept_id in (4197485,4029498)
-  and c.invalid_reason is null
-
-) I
-LEFT JOIN
-(
-  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (435875,380533,443700,4202330,37109948,4176652,4044227)
-UNION  select c.concept_id
-  from @vocabulary_database_schema.CONCEPT c
-  join @vocabulary_database_schema.CONCEPT_ANCESTOR ca on c.concept_id = ca.descendant_concept_id
-  and ca.ancestor_concept_id in (435875,380533,443700,4202330,37109948)
-  and c.invalid_reason is null
-
-) E ON I.concept_id = E.concept_id
-WHERE E.concept_id is null
-) C;
-
-UPDATE STATISTICS #Codesets;
-
-
-SELECT event_id, person_id, start_date, end_date, op_start_date, op_end_date, visit_occurrence_id
-INTO #qualified_events
-FROM 
-(
-  select pe.event_id, pe.person_id, pe.start_date, pe.end_date, pe.op_start_date, pe.op_end_date, row_number() over (partition by pe.person_id order by pe.start_date ASC) as ordinal, cast(pe.visit_occurrence_id as bigint) as visit_occurrence_id
-  FROM (-- Begin Primary Events
-select P.ordinal as event_id, P.person_id, P.start_date, P.end_date, op_start_date, op_end_date, cast(P.visit_occurrence_id as bigint) as visit_occurrence_id
-FROM
-(
-  select E.person_id, E.start_date, E.end_date,
-         row_number() OVER (PARTITION BY E.person_id ORDER BY E.sort_date ASC, E.event_id) ordinal,
-         OP.observation_period_start_date as op_start_date, OP.observation_period_end_date as op_end_date, cast(E.visit_occurrence_id as bigint) as visit_occurrence_id
-  FROM 
-  (
-  -- Begin Condition Occurrence Criteria
-SELECT C.person_id, C.condition_occurrence_id as event_id, C.start_date, C.end_date,
-  C.visit_occurrence_id, C.start_date as sort_date
-FROM 
-(
-  SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
-  FROM @cdm_database_schema.CONDITION_OCCURRENCE co
-  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 0)
-) C
-
-
--- End Condition Occurrence Criteria
-
-  ) E
-	JOIN @cdm_database_schema.observation_period OP on E.person_id = OP.person_id and E.start_date >=  OP.observation_period_start_date and E.start_date <= op.observation_period_end_date
-  WHERE DATEADD(day,0,OP.OBSERVATION_PERIOD_START_DATE) <= E.START_DATE AND DATEADD(day,0,E.START_DATE) <= OP.OBSERVATION_PERIOD_END_DATE
-) P
-WHERE P.ordinal = 1
--- End Primary Events
-) pe
-  
-) QE
-
-;
-
---- Inclusion Rule Inserts
-
-create table #inclusion_events (inclusion_rule_id bigint,
-	person_id bigint,
-	event_id bigint
-);
-
-select event_id, person_id, start_date, end_date, op_start_date, op_end_date
-into #included_events
-FROM (
-  SELECT event_id, person_id, start_date, end_date, op_start_date, op_end_date, row_number() over (partition by person_id order by start_date ASC) as ordinal
-  from
-  (
-    select Q.event_id, Q.person_id, Q.start_date, Q.end_date, Q.op_start_date, Q.op_end_date, SUM(coalesce(POWER(cast(2 as bigint), I.inclusion_rule_id), 0)) as inclusion_rule_mask
-    from #qualified_events Q
-    LEFT JOIN #inclusion_events I on I.person_id = Q.person_id and I.event_id = Q.event_id
-    GROUP BY Q.event_id, Q.person_id, Q.start_date, Q.end_date, Q.op_start_date, Q.op_end_date
-  ) MG -- matching groups
-
-) Results
-WHERE Results.ordinal = 1
-;
-
-
-
--- generate cohort periods into #final_cohort
-select person_id, start_date, end_date
-INTO #cohort_rows
-from ( -- first_ends
-	select F.person_id, F.start_date, F.end_date
-	FROM (
-	  select I.event_id, I.person_id, I.start_date, CE.end_date, row_number() over (partition by I.person_id, I.event_id order by CE.end_date) as ordinal
-	  from #included_events I
-	  join ( -- cohort_ends
--- cohort exit dates
--- By default, cohort exit at the event's op end date
-select event_id, person_id, op_end_date as end_date from #included_events
-    ) CE on I.event_id = CE.event_id and I.person_id = CE.person_id and CE.end_date >= I.start_date
-	) F
-	WHERE F.ordinal = 1
-) FE;
-
-select person_id, min(start_date) as start_date, end_date
-into #final_cohort
-from ( --cteEnds
-	SELECT
-		 c.person_id
-		, c.start_date
-		, MIN(ed.end_date) AS end_date
-	FROM #cohort_rows c
-	JOIN ( -- cteEndDates
-    SELECT
-      person_id
-      , DATEADD(day,-1 * 0, event_date)  as end_date
-    FROM
-    (
-      SELECT
-        person_id
-        , event_date
-        , event_type
-        , SUM(event_type) OVER (PARTITION BY person_id ORDER BY event_date, event_type ROWS UNBOUNDED PRECEDING) AS interval_status
-      FROM
-      (
-        SELECT
-          person_id
-          , start_date AS event_date
-          , -1 AS event_type
-        FROM #cohort_rows
-
-        UNION ALL
-
-
-        SELECT
-          person_id
-          , DATEADD(day,0,end_date) as end_date
-          , 1 AS event_type
-        FROM #cohort_rows
-      ) RAWDATA
-    ) e
-    WHERE interval_status = 0
-  ) ed ON c.person_id = ed.person_id AND ed.end_date >= c.start_date
-	GROUP BY c.person_id, c.start_date
-) e
-group by person_id, end_date
-;
-
-DELETE FROM @target_database_schema.@target_cohort_table where cohort_definition_id = @target_cohort_id;
-INSERT INTO @target_database_schema.@target_cohort_table (cohort_definition_id, subject_id, cohort_start_date, cohort_end_date)
-select @target_cohort_id as cohort_definition_id, person_id, start_date, end_date 
-FROM #final_cohort CO
-;
-
-
-
-
-
-
-TRUNCATE TABLE #cohort_rows;
-DROP TABLE #cohort_rows;
-
-TRUNCATE TABLE #final_cohort;
-DROP TABLE #final_cohort;
-
-TRUNCATE TABLE #inclusion_events;
-DROP TABLE #inclusion_events;
-
-TRUNCATE TABLE #qualified_events;
-DROP TABLE #qualified_events;
-
-TRUNCATE TABLE #included_events;
-DROP TABLE #included_events;
-
-TRUNCATE TABLE #Codesets;
-DROP TABLE #Codesets;
-","{
-	""cdmVersionRange"" : "">=5.0.0"",
-	""PrimaryCriteria"" : {
-		""CriteriaList"" : [
-			{
-				""ConditionOccurrence"" : {
-					""CodesetId"" : 0,
-					""ConditionTypeExclude"" : false
-				}
-			}
-		],
-		""ObservationWindow"" : {
-			""PriorDays"" : 0,
-			""PostDays"" : 0
-		},
-		""PrimaryCriteriaLimit"" : {
-			""Type"" : ""First""
-		}
-	},
-	""ConceptSets"" : [
-		{
-			""id"" : 0,
-			""name"" : ""Epilepsy Seizures excl Alcohol withdrawal-induced convulsion"",
-			""expression"" : {
-				""items"" : [
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 435875,
-							""CONCEPT_NAME"" : ""Complication of pregnancy, childbirth and/or the puerperium"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""198609003"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : true,
-						""includeDescendants"" : true,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 380533,
-							""CONCEPT_NAME"" : ""Convulsions in the newborn"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""87476004"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : true,
-						""includeDescendants"" : true,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 443700,
-							""CONCEPT_NAME"" : ""Eclampsia"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""15938005"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : true,
-						""includeDescendants"" : true,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 4197485,
-							""CONCEPT_NAME"" : ""Epileptic seizure"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""313307000"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : true,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 4029498,
-							""CONCEPT_NAME"" : ""Seizure disorder"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""128613002"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : true,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 4202330,
-							""CONCEPT_NAME"" : ""Alcohol withdrawal-induced convulsion"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""308742005"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : true,
-						""includeDescendants"" : true,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 37109948,
-							""CONCEPT_NAME"" : ""Perceptual disturbances and seizures co-occurrent and due to alcohol withdrawal"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""723926008"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : true,
-						""includeDescendants"" : true,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 4176652,
-							""CONCEPT_NAME"" : ""Alcohol-induced epilepsy"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""361268000"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : true,
-						""includeDescendants"" : false,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 4044227,
-							""CONCEPT_NAME"" : ""Myoclonic epilepsy with ragged red fibers"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""230426003"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : true,
-						""includeDescendants"" : false,
-						""includeMapped"" : false
-					}
-				]
-			}
-		}
-	],
-	""QualifiedLimit"" : {
-		""Type"" : ""First""
-	},
-	""ExpressionLimit"" : {
-		""Type"" : ""First""
-	},
-	""InclusionRules"" : [],
-	""CensoringCriteria"" : [],
-	""CollapseSettings"" : {
-		""CollapseType"" : ""ERA"",
-		""EraPad"" : 0
-	},
-	""CensorWindow"" : {}
-}","hashTag: #ASSURE, #Indication, #ASSURE-Indication, #Neuroscience
-logic: Earliest occurrence of Epilepsy indexed on diagnosis date; cohort exit is the end of continuous observation.",FALSE
 18885,18885,[mschuemi] Any flu vaccination,"CREATE TABLE #Codesets (
   codeset_id int NOT NULL,
   concept_id bigint NOT NULL
@@ -7278,319 +6895,6 @@ DROP TABLE #Codesets;
 	},
 	""CensorWindow"" : {}
 }",NA,FALSE
-7017,7017,"[ASSURE-C] carbamazepine exposures w 0d prior obsv, 30d gap","CREATE TABLE #Codesets (
-  codeset_id int NOT NULL,
-  concept_id bigint NOT NULL
-)
-;
-
-INSERT INTO #Codesets (codeset_id, concept_id)
-SELECT 0 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
-( 
-  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (740275)
-UNION  select c.concept_id
-  from @vocabulary_database_schema.CONCEPT c
-  join @vocabulary_database_schema.CONCEPT_ANCESTOR ca on c.concept_id = ca.descendant_concept_id
-  and ca.ancestor_concept_id in (740275)
-  and c.invalid_reason is null
-
-) I
-) C;
-
-UPDATE STATISTICS #Codesets;
-
-
-SELECT event_id, person_id, start_date, end_date, op_start_date, op_end_date, visit_occurrence_id
-INTO #qualified_events
-FROM 
-(
-  select pe.event_id, pe.person_id, pe.start_date, pe.end_date, pe.op_start_date, pe.op_end_date, row_number() over (partition by pe.person_id order by pe.start_date ASC) as ordinal, cast(pe.visit_occurrence_id as bigint) as visit_occurrence_id
-  FROM (-- Begin Primary Events
-select P.ordinal as event_id, P.person_id, P.start_date, P.end_date, op_start_date, op_end_date, cast(P.visit_occurrence_id as bigint) as visit_occurrence_id
-FROM
-(
-  select E.person_id, E.start_date, E.end_date,
-         row_number() OVER (PARTITION BY E.person_id ORDER BY E.sort_date ASC, E.event_id) ordinal,
-         OP.observation_period_start_date as op_start_date, OP.observation_period_end_date as op_end_date, cast(E.visit_occurrence_id as bigint) as visit_occurrence_id
-  FROM 
-  (
-  -- Begin Drug Exposure Criteria
-select C.person_id, C.drug_exposure_id as event_id, C.start_date, C.end_date,
-  C.visit_occurrence_id,C.start_date as sort_date
-from 
-(
-  select de.person_id,de.drug_exposure_id,de.drug_concept_id,de.visit_occurrence_id,days_supply,quantity,refills,de.drug_exposure_start_date as start_date, COALESCE(de.drug_exposure_end_date, DATEADD(day,de.days_supply,de.drug_exposure_start_date), DATEADD(day,1,de.drug_exposure_start_date)) as end_date 
-  FROM @cdm_database_schema.DRUG_EXPOSURE de
-JOIN #Codesets cs on (de.drug_concept_id = cs.concept_id and cs.codeset_id = 0)
-) C
-
-
--- End Drug Exposure Criteria
-
-  ) E
-	JOIN @cdm_database_schema.observation_period OP on E.person_id = OP.person_id and E.start_date >=  OP.observation_period_start_date and E.start_date <= op.observation_period_end_date
-  WHERE DATEADD(day,0,OP.OBSERVATION_PERIOD_START_DATE) <= E.START_DATE AND DATEADD(day,0,E.START_DATE) <= OP.OBSERVATION_PERIOD_END_DATE
-) P
-
--- End Primary Events
-) pe
-  
-) QE
-
-;
-
---- Inclusion Rule Inserts
-
-create table #inclusion_events (inclusion_rule_id bigint,
-	person_id bigint,
-	event_id bigint
-);
-
-select event_id, person_id, start_date, end_date, op_start_date, op_end_date
-into #included_events
-FROM (
-  SELECT event_id, person_id, start_date, end_date, op_start_date, op_end_date, row_number() over (partition by person_id order by start_date ASC) as ordinal
-  from
-  (
-    select Q.event_id, Q.person_id, Q.start_date, Q.end_date, Q.op_start_date, Q.op_end_date, SUM(coalesce(POWER(cast(2 as bigint), I.inclusion_rule_id), 0)) as inclusion_rule_mask
-    from #qualified_events Q
-    LEFT JOIN #inclusion_events I on I.person_id = Q.person_id and I.event_id = Q.event_id
-    GROUP BY Q.event_id, Q.person_id, Q.start_date, Q.end_date, Q.op_start_date, Q.op_end_date
-  ) MG -- matching groups
-
-) Results
-
-;
-
--- custom era strategy
-
-with ctePersons(person_id) as (
-	select distinct person_id from #included_events
-)
-
-select person_id, drug_exposure_start_date, drug_exposure_end_date
-INTO #drugTarget
-FROM (
-	select de.PERSON_ID, DRUG_EXPOSURE_START_DATE, COALESCE(DRUG_EXPOSURE_END_DATE, DATEADD(day,DAYS_SUPPLY,DRUG_EXPOSURE_START_DATE), DATEADD(day,1,DRUG_EXPOSURE_START_DATE)) as DRUG_EXPOSURE_END_DATE 
-	FROM @cdm_database_schema.DRUG_EXPOSURE de
-	JOIN ctePersons p on de.person_id = p.person_id
-	JOIN #Codesets cs on cs.codeset_id = 0 AND de.drug_concept_id = cs.concept_id
-
-	UNION ALL
-
-	select de.PERSON_ID, DRUG_EXPOSURE_START_DATE, COALESCE(DRUG_EXPOSURE_END_DATE, DATEADD(day,DAYS_SUPPLY,DRUG_EXPOSURE_START_DATE), DATEADD(day,1,DRUG_EXPOSURE_START_DATE)) as DRUG_EXPOSURE_END_DATE 
-	FROM @cdm_database_schema.DRUG_EXPOSURE de
-	JOIN ctePersons p on de.person_id = p.person_id
-	JOIN #Codesets cs on cs.codeset_id = 0 AND de.drug_source_concept_id = cs.concept_id
-) E
-;
-
-select et.event_id, et.person_id, ERAS.era_end_date as end_date
-INTO #strategy_ends
-from #included_events et
-JOIN 
-(
-  select ENDS.person_id, min(drug_exposure_start_date) as era_start_date, DATEADD(day,0, ENDS.era_end_date) as era_end_date
-  from
-  (
-    select de.person_id, de.drug_exposure_start_date, MIN(e.END_DATE) as era_end_date
-    FROM #drugTarget DE
-    JOIN 
-    (
-      --cteEndDates
-      select PERSON_ID, DATEADD(day,-1 * 30,EVENT_DATE) as END_DATE -- unpad the end date by 30
-      FROM
-      (
-				select PERSON_ID, EVENT_DATE, EVENT_TYPE, 
-				MAX(START_ORDINAL) OVER (PARTITION BY PERSON_ID ORDER BY event_date, event_type, START_ORDINAL ROWS UNBOUNDED PRECEDING) AS start_ordinal,
-				ROW_NUMBER() OVER (PARTITION BY PERSON_ID ORDER BY EVENT_DATE, EVENT_TYPE, START_ORDINAL) AS OVERALL_ORD -- this re-numbers the inner UNION so all rows are numbered ordered by the event date
-				from
-				(
-					-- select the start dates, assigning a row number to each
-					Select PERSON_ID, DRUG_EXPOSURE_START_DATE AS EVENT_DATE, 0 as EVENT_TYPE, ROW_NUMBER() OVER (PARTITION BY PERSON_ID ORDER BY DRUG_EXPOSURE_START_DATE) as START_ORDINAL
-					from #drugTarget D
-
-					UNION ALL
-
-					-- add the end dates with NULL as the row number, padding the end dates by 30 to allow a grace period for overlapping ranges.
-					select PERSON_ID, DATEADD(day,30,DRUG_EXPOSURE_END_DATE), 1 as EVENT_TYPE, NULL
-					FROM #drugTarget D
-				) RAWDATA
-      ) E
-      WHERE 2 * E.START_ORDINAL - E.OVERALL_ORD = 0
-    ) E on DE.PERSON_ID = E.PERSON_ID and E.END_DATE >= DE.DRUG_EXPOSURE_START_DATE
-    GROUP BY de.person_id, de.drug_exposure_start_date
-  ) ENDS
-  GROUP BY ENDS.person_id, ENDS.era_end_date
-) ERAS on ERAS.person_id = et.person_id 
-WHERE et.start_date between ERAS.era_start_date and ERAS.era_end_date;
-
-TRUNCATE TABLE #drugTarget;
-DROP TABLE #drugTarget;
-
-
--- generate cohort periods into #final_cohort
-select person_id, start_date, end_date
-INTO #cohort_rows
-from ( -- first_ends
-	select F.person_id, F.start_date, F.end_date
-	FROM (
-	  select I.event_id, I.person_id, I.start_date, CE.end_date, row_number() over (partition by I.person_id, I.event_id order by CE.end_date) as ordinal
-	  from #included_events I
-	  join ( -- cohort_ends
--- cohort exit dates
--- By default, cohort exit at the event's op end date
-select event_id, person_id, op_end_date as end_date from #included_events
-UNION ALL
--- End Date Strategy
-SELECT event_id, person_id, end_date from #strategy_ends
-
-    ) CE on I.event_id = CE.event_id and I.person_id = CE.person_id and CE.end_date >= I.start_date
-	) F
-	WHERE F.ordinal = 1
-) FE;
-
-select person_id, min(start_date) as start_date, end_date
-into #final_cohort
-from ( --cteEnds
-	SELECT
-		 c.person_id
-		, c.start_date
-		, MIN(ed.end_date) AS end_date
-	FROM #cohort_rows c
-	JOIN ( -- cteEndDates
-    SELECT
-      person_id
-      , DATEADD(day,-1 * 0, event_date)  as end_date
-    FROM
-    (
-      SELECT
-        person_id
-        , event_date
-        , event_type
-        , SUM(event_type) OVER (PARTITION BY person_id ORDER BY event_date, event_type ROWS UNBOUNDED PRECEDING) AS interval_status
-      FROM
-      (
-        SELECT
-          person_id
-          , start_date AS event_date
-          , -1 AS event_type
-        FROM #cohort_rows
-
-        UNION ALL
-
-
-        SELECT
-          person_id
-          , DATEADD(day,0,end_date) as end_date
-          , 1 AS event_type
-        FROM #cohort_rows
-      ) RAWDATA
-    ) e
-    WHERE interval_status = 0
-  ) ed ON c.person_id = ed.person_id AND ed.end_date >= c.start_date
-	GROUP BY c.person_id, c.start_date
-) e
-group by person_id, end_date
-;
-
-DELETE FROM @target_database_schema.@target_cohort_table where cohort_definition_id = @target_cohort_id;
-INSERT INTO @target_database_schema.@target_cohort_table (cohort_definition_id, subject_id, cohort_start_date, cohort_end_date)
-select @target_cohort_id as cohort_definition_id, person_id, start_date, end_date 
-FROM #final_cohort CO
-;
-
-
-
-
-TRUNCATE TABLE #strategy_ends;
-DROP TABLE #strategy_ends;
-
-
-TRUNCATE TABLE #cohort_rows;
-DROP TABLE #cohort_rows;
-
-TRUNCATE TABLE #final_cohort;
-DROP TABLE #final_cohort;
-
-TRUNCATE TABLE #inclusion_events;
-DROP TABLE #inclusion_events;
-
-TRUNCATE TABLE #qualified_events;
-DROP TABLE #qualified_events;
-
-TRUNCATE TABLE #included_events;
-DROP TABLE #included_events;
-
-TRUNCATE TABLE #Codesets;
-DROP TABLE #Codesets;
-","{
-	""cdmVersionRange"" : "">=5.0.0"",
-	""PrimaryCriteria"" : {
-		""CriteriaList"" : [
-			{
-				""DrugExposure"" : {
-					""CodesetId"" : 0,
-					""DrugTypeExclude"" : false
-				}
-			}
-		],
-		""ObservationWindow"" : {
-			""PriorDays"" : 0,
-			""PostDays"" : 0
-		},
-		""PrimaryCriteriaLimit"" : {
-			""Type"" : ""All""
-		}
-	},
-	""ConceptSets"" : [
-		{
-			""id"" : 0,
-			""name"" : ""Assure Exposure - C - carbamazepine"",
-			""expression"" : {
-				""items"" : [
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 740275,
-							""CONCEPT_NAME"" : ""carbamazepine"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""2002"",
-							""DOMAIN_ID"" : ""Drug"",
-							""VOCABULARY_ID"" : ""RxNorm"",
-							""CONCEPT_CLASS_ID"" : ""Ingredient""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : true,
-						""includeMapped"" : false
-					}
-				]
-			}
-		}
-	],
-	""QualifiedLimit"" : {
-		""Type"" : ""First""
-	},
-	""ExpressionLimit"" : {
-		""Type"" : ""All""
-	},
-	""InclusionRules"" : [],
-	""EndStrategy"" : {
-		""CustomEra"" : {
-			""DrugCodesetId"" : 0,
-			""GapDays"" : 30,
-			""Offset"" : 0
-		}
-	},
-	""CensoringCriteria"" : [],
-	""CollapseSettings"" : {
-		""CollapseType"" : ""ERA"",
-		""EraPad"" : 0
-	},
-	""CensorWindow"" : {}
-}",NA,FALSE
 18901,18901,[mschuemi] Allergic rhinitis,"CREATE TABLE #Codesets (
   codeset_id int NOT NULL,
   concept_id bigint NOT NULL
@@ -12876,14 +12180,25 @@ DROP TABLE #Codesets;
 	},
 	""CensorWindow"" : {}
 }",NA,FALSE
-2088,2088,"[PL][D] All events of Hemorrhagic stroke in an inpatient setting, with a washout period of 365 days","CREATE TABLE #Codesets (
+609,609,[COVID AESI] Guillain Barre syndrome IP events,"CREATE TABLE #Codesets (
   codeset_id int NOT NULL,
   concept_id bigint NOT NULL
 )
 ;
 
 INSERT INTO #Codesets (codeset_id, concept_id)
-SELECT 2 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
+SELECT 0 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
+( 
+  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (374925,4164770,4070552)
+UNION  select c.concept_id
+  from @vocabulary_database_schema.CONCEPT c
+  join @vocabulary_database_schema.CONCEPT_ANCESTOR ca on c.concept_id = ca.descendant_concept_id
+  and ca.ancestor_concept_id in (374925,4164770,4070552)
+  and c.invalid_reason is null
+
+) I
+) C UNION ALL 
+SELECT 1 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
 ( 
   select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (262,9201)
 UNION  select c.concept_id
@@ -12893,23 +12208,6 @@ UNION  select c.concept_id
   and c.invalid_reason is null
 
 ) I
-) C UNION ALL 
-SELECT 5 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
-( 
-  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (439847,432923,4148906,4144154,4111709,42535426,43530728,43530727,4108952,4111708,35609033)
-
-) I
-LEFT JOIN
-(
-  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (376713,4174299,36716544,4345688)
-UNION  select c.concept_id
-  from @vocabulary_database_schema.CONCEPT c
-  join @vocabulary_database_schema.CONCEPT_ANCESTOR ca on c.concept_id = ca.descendant_concept_id
-  and ca.ancestor_concept_id in (4174299,36716544,4345688)
-  and c.invalid_reason is null
-
-) E ON I.concept_id = E.concept_id
-WHERE E.concept_id is null
 ) C;
 
 UPDATE STATISTICS #Codesets;
@@ -12936,7 +12234,7 @@ FROM
 (
   SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
   FROM @cdm_database_schema.CONDITION_OCCURRENCE co
-  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 5)
+  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 0)
 ) C
 
 
@@ -12972,7 +12270,7 @@ FROM
 (
   SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
   FROM @cdm_database_schema.CONDITION_OCCURRENCE co
-  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 5)
+  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 0)
 ) C
 
 
@@ -13006,7 +12304,7 @@ FROM
 (
   SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
   FROM @cdm_database_schema.CONDITION_OCCURRENCE co
-  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 5)
+  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 0)
 ) C
 
 
@@ -13027,7 +12325,7 @@ from
 (
   select vo.person_id,vo.visit_occurrence_id,vo.visit_concept_id,vo.visit_start_date as start_date, vo.visit_end_date as end_date 
   FROM @cdm_database_schema.VISIT_OCCURRENCE vo
-JOIN #Codesets cs on (vo.visit_concept_id = cs.concept_id and cs.codeset_id = 2)
+JOIN #Codesets cs on (vo.visit_concept_id = cs.concept_id and cs.codeset_id = 1)
 ) C
 
 
@@ -13082,7 +12380,7 @@ FROM
 (
   SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
   FROM @cdm_database_schema.CONDITION_OCCURRENCE co
-  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 5)
+  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 0)
 ) C
 
 
@@ -13103,7 +12401,7 @@ FROM
 (
   SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
   FROM @cdm_database_schema.CONDITION_OCCURRENCE co
-  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 5)
+  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 0)
 ) C
 
 
@@ -13125,7 +12423,7 @@ FROM
 (
   SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
   FROM @cdm_database_schema.CONDITION_OCCURRENCE co
-  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 5)
+  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 0)
 ) C
 
 
@@ -13142,7 +12440,7 @@ from
 (
   select vo.person_id,vo.visit_occurrence_id,vo.visit_concept_id,vo.visit_start_date as start_date, vo.visit_end_date as end_date 
   FROM @cdm_database_schema.VISIT_OCCURRENCE vo
-JOIN #Codesets cs on (vo.visit_concept_id = cs.concept_id and cs.codeset_id = 2)
+JOIN #Codesets cs on (vo.visit_concept_id = cs.concept_id and cs.codeset_id = 1)
 ) C
 
 
@@ -13306,7 +12604,7 @@ DROP TABLE #Codesets;
 		""CriteriaList"" : [
 			{
 				""ConditionOccurrence"" : {
-					""CodesetId"" : 5,
+					""CodesetId"" : 0,
 					""ConditionTypeExclude"" : false
 				}
 			}
@@ -13325,7 +12623,7 @@ DROP TABLE #Codesets;
 			{
 				""Criteria"" : {
 					""VisitOccurrence"" : {
-						""CodesetId"" : 2,
+						""CodesetId"" : 1,
 						""VisitTypeExclude"" : false
 					}
 				},
@@ -13365,7 +12663,66 @@ DROP TABLE #Codesets;
 	},
 	""ConceptSets"" : [
 		{
-			""id"" : 2,
+			""id"" : 0,
+			""name"" : ""Guillian-Barre syndrome"",
+			""expression"" : {
+				""items"" : [
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 374925,
+							""CONCEPT_NAME"" : ""Acute infective polyneuritis"",
+							""STANDARD_CONCEPT"" : ""S"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""129131007"",
+							""DOMAIN_ID"" : ""Condition"",
+							""VOCABULARY_ID"" : ""SNOMED"",
+							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
+						},
+						""isExcluded"" : false,
+						""includeDescendants"" : true,
+						""includeMapped"" : false
+					},
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 4164770,
+							""CONCEPT_NAME"" : ""Guillain-Barré syndrome"",
+							""STANDARD_CONCEPT"" : ""S"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""40956001"",
+							""DOMAIN_ID"" : ""Condition"",
+							""VOCABULARY_ID"" : ""SNOMED"",
+							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
+						},
+						""isExcluded"" : false,
+						""includeDescendants"" : true,
+						""includeMapped"" : false
+					},
+					{
+						""concept"" : {
+							""CONCEPT_ID"" : 4070552,
+							""CONCEPT_NAME"" : ""Fisher's syndrome"",
+							""STANDARD_CONCEPT"" : ""S"",
+							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
+							""INVALID_REASON"" : ""V"",
+							""INVALID_REASON_CAPTION"" : ""Valid"",
+							""CONCEPT_CODE"" : ""1767005"",
+							""DOMAIN_ID"" : ""Condition"",
+							""VOCABULARY_ID"" : ""SNOMED"",
+							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
+						},
+						""isExcluded"" : false,
+						""includeDescendants"" : true,
+						""includeMapped"" : false
+					}
+				]
+			}
+		},
+		{
+			""id"" : 1,
 			""name"" : ""Inpatient or Inpatient/ER visit"",
 			""expression"" : {
 				""items"" : [
@@ -13405,269 +12762,6 @@ DROP TABLE #Codesets;
 					}
 				]
 			}
-		},
-		{
-			""id"" : 5,
-			""name"" : ""Hemorrhagic stroke"",
-			""expression"" : {
-				""items"" : [
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 439847,
-							""CONCEPT_NAME"" : ""Intracranial hemorrhage"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""1386000"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : false,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 432923,
-							""CONCEPT_NAME"" : ""Subarachnoid hemorrhage"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""21454007"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : false,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 376713,
-							""CONCEPT_NAME"" : ""Cerebral hemorrhage"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""274100004"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : true,
-						""includeDescendants"" : false,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 4148906,
-							""CONCEPT_NAME"" : ""Spontaneous subarachnoid hemorrhage"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""270907008"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : false,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 4144154,
-							""CONCEPT_NAME"" : ""Non-traumatic intracerebral ventricular hemorrhage"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""425957003"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : false,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 4111709,
-							""CONCEPT_NAME"" : ""Non-traumatic subdural hemorrhage"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""195176009"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : false,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 42535426,
-							""CONCEPT_NAME"" : ""Acute nontraumatic subdural hemorrhage"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""291581000119109"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : false,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 43530728,
-							""CONCEPT_NAME"" : ""Subacute non-traumatic intracranial subdural hemorrhage"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""291591000119107"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : false,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 4174299,
-							""CONCEPT_NAME"" : ""Perinatal intracranial hemorrhage"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""276647007"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : true,
-						""includeDescendants"" : true,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 36716544,
-							""CONCEPT_NAME"" : ""Fetal or neonatal non-traumatic intraventricular hemorrhage"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""722581000"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : true,
-						""includeDescendants"" : true,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 4345688,
-							""CONCEPT_NAME"" : ""Intracerebral hemorrhage in fetus or newborn"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""240313004"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : true,
-						""includeDescendants"" : true,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 43530727,
-							""CONCEPT_NAME"" : ""Spontaneous cerebral hemorrhage"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""291571000119106"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : false,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 4108952,
-							""CONCEPT_NAME"" : ""Subarachnoid hemorrhage from carotid siphon and bifurcation"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""195155004"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : false,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 4111708,
-							""CONCEPT_NAME"" : ""Subarachnoid hemorrhage from vertebral artery"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""195160000"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : false,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 35609033,
-							""CONCEPT_NAME"" : ""Haemorrhagic stroke"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""1078001000000105"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : false,
-						""includeMapped"" : false
-					}
-				]
-			}
 		}
 	],
 	""QualifiedLimit"" : {
@@ -13678,7 +12772,7 @@ DROP TABLE #Codesets;
 	},
 	""InclusionRules"" : [
 		{
-			""name"" : ""has no events in prior 'clean window' - 365 days"",
+			""name"" : ""has no events in prior 'clean window'"",
 			""expression"" : {
 				""Type"" : ""ALL"",
 				""CriteriaList"" : [
@@ -13691,7 +12785,7 @@ DROP TABLE #Codesets;
 										{
 											""Criteria"" : {
 												""VisitOccurrence"" : {
-													""CodesetId"" : 2,
+													""CodesetId"" : 1,
 													""VisitTypeExclude"" : false
 												}
 											},
@@ -13729,7 +12823,7 @@ DROP TABLE #Codesets;
 									""DemographicCriteriaList"" : [],
 									""Groups"" : []
 								},
-								""CodesetId"" : 5,
+								""CodesetId"" : 0,
 								""ConditionTypeExclude"" : false
 							}
 						},
@@ -13771,9 +12865,7 @@ DROP TABLE #Codesets;
 		""EraPad"" : 0
 	},
 	""CensorWindow"" : {}
-}","hashTag: #2021, #deprecated;
-status: deprecated
-logic: All events of Hemorrhagic stroke, indexed on a condition occurrence of Hemorrhagic stroke, limited to events with overlapping inpatient visit with no such events  in prior 365 days (clean window). Persons exit the cohort at the start date + 1 day. ",FALSE
+}","All any diagnosis events of GB syndrome (includes Fisher syndrome) limited to overlapping inpatient visit, with no such events in prior clean period (365 days). No continuous observation period requirement. Persons exit the cohort on start_date + 1 day. Note - Acute infective polyneuritis code was used to capture GB syndrome in ICD9CM.",FALSE
 18883,18883,[mschuemi] Low back pain for SCCS,"CREATE TABLE #Codesets (
   codeset_id int NOT NULL,
   concept_id bigint NOT NULL
@@ -14100,428 +13192,3 @@ DROP TABLE #Codesets;
 	},
 	""CensorWindow"" : {}
 }",NA,FALSE
-10711,10711,"[PL] Earliest event of Stevens-Johnson syndrome, Toxic epidermal necrolysis spectrum (TEN), IP or ER","CREATE TABLE #Codesets (
-  codeset_id int NOT NULL,
-  concept_id bigint NOT NULL
-)
-;
-
-INSERT INTO #Codesets (codeset_id, concept_id)
-SELECT 2 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
-( 
-  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (35625857)
-UNION  select c.concept_id
-  from @vocabulary_database_schema.CONCEPT c
-  join @vocabulary_database_schema.CONCEPT_ANCESTOR ca on c.concept_id = ca.descendant_concept_id
-  and ca.ancestor_concept_id in (35625857)
-  and c.invalid_reason is null
-
-) I
-) C UNION ALL 
-SELECT 3 as codeset_id, c.concept_id FROM (select distinct I.concept_id FROM
-( 
-  select concept_id from @vocabulary_database_schema.CONCEPT where concept_id in (262,9203,9201)
-UNION  select c.concept_id
-  from @vocabulary_database_schema.CONCEPT c
-  join @vocabulary_database_schema.CONCEPT_ANCESTOR ca on c.concept_id = ca.descendant_concept_id
-  and ca.ancestor_concept_id in (262,9203,9201)
-  and c.invalid_reason is null
-
-) I
-) C;
-
-UPDATE STATISTICS #Codesets;
-
-
-SELECT event_id, person_id, start_date, end_date, op_start_date, op_end_date, visit_occurrence_id
-INTO #qualified_events
-FROM 
-(
-  select pe.event_id, pe.person_id, pe.start_date, pe.end_date, pe.op_start_date, pe.op_end_date, row_number() over (partition by pe.person_id order by pe.start_date ASC) as ordinal, cast(pe.visit_occurrence_id as bigint) as visit_occurrence_id
-  FROM (-- Begin Primary Events
-select P.ordinal as event_id, P.person_id, P.start_date, P.end_date, op_start_date, op_end_date, cast(P.visit_occurrence_id as bigint) as visit_occurrence_id
-FROM
-(
-  select E.person_id, E.start_date, E.end_date,
-         row_number() OVER (PARTITION BY E.person_id ORDER BY E.sort_date ASC, E.event_id) ordinal,
-         OP.observation_period_start_date as op_start_date, OP.observation_period_end_date as op_end_date, cast(E.visit_occurrence_id as bigint) as visit_occurrence_id
-  FROM 
-  (
-  -- Begin Condition Occurrence Criteria
-SELECT C.person_id, C.condition_occurrence_id as event_id, C.start_date, C.end_date,
-  C.visit_occurrence_id, C.start_date as sort_date
-FROM 
-(
-  SELECT co.person_id,co.condition_occurrence_id,co.condition_concept_id,co.visit_occurrence_id,co.condition_start_date as start_date, COALESCE(co.condition_end_date, DATEADD(day,1,co.condition_start_date)) as end_date 
-  FROM @cdm_database_schema.CONDITION_OCCURRENCE co
-  JOIN #Codesets cs on (co.condition_concept_id = cs.concept_id and cs.codeset_id = 2)
-) C
-
-
--- End Condition Occurrence Criteria
-
-  ) E
-	JOIN @cdm_database_schema.observation_period OP on E.person_id = OP.person_id and E.start_date >=  OP.observation_period_start_date and E.start_date <= op.observation_period_end_date
-  WHERE DATEADD(day,0,OP.OBSERVATION_PERIOD_START_DATE) <= E.START_DATE AND DATEADD(day,0,E.START_DATE) <= OP.OBSERVATION_PERIOD_END_DATE
-) P
-
--- End Primary Events
-) pe
-  
-) QE
-
-;
-
---- Inclusion Rule Inserts
-
-select 0 as inclusion_rule_id, person_id, event_id
-INTO #Inclusion_0
-FROM 
-(
-  select pe.person_id, pe.event_id
-  FROM #qualified_events pe
-  
-JOIN (
--- Begin Criteria Group
-select 0 as index_id, person_id, event_id
-FROM
-(
-  select E.person_id, E.event_id 
-  FROM #qualified_events E
-  INNER JOIN
-  (
-    -- Begin Correlated Criteria
-select 0 as index_id, cc.person_id, cc.event_id
-from (SELECT p.person_id, p.event_id 
-FROM #qualified_events P
-JOIN (
-  -- Begin Visit Occurrence Criteria
-select C.person_id, C.visit_occurrence_id as event_id, C.start_date, C.end_date,
-       C.visit_occurrence_id, C.start_date as sort_date
-from 
-(
-  select vo.person_id,vo.visit_occurrence_id,vo.visit_concept_id,vo.visit_start_date as start_date, vo.visit_end_date as end_date 
-  FROM @cdm_database_schema.VISIT_OCCURRENCE vo
-JOIN #Codesets cs on (vo.visit_concept_id = cs.concept_id and cs.codeset_id = 3)
-) C
-
-
--- End Visit Occurrence Criteria
-
-) A on A.person_id = P.person_id  AND A.START_DATE >= P.OP_START_DATE AND A.START_DATE <= P.OP_END_DATE AND A.START_DATE >= P.OP_START_DATE AND A.START_DATE <= DATEADD(day,0,P.START_DATE) AND A.END_DATE >= DATEADD(day,0,P.START_DATE) AND A.END_DATE <= P.OP_END_DATE ) cc 
-GROUP BY cc.person_id, cc.event_id
-HAVING COUNT(cc.event_id) >= 1
--- End Correlated Criteria
-
-  ) CQ on E.person_id = CQ.person_id and E.event_id = CQ.event_id
-  GROUP BY E.person_id, E.event_id
-  HAVING COUNT(index_id) = 1
-) G
--- End Criteria Group
-) AC on AC.person_id = pe.person_id AND AC.event_id = pe.event_id
-) Results
-;
-
-SELECT inclusion_rule_id, person_id, event_id
-INTO #inclusion_events
-FROM (select inclusion_rule_id, person_id, event_id from #Inclusion_0) I;
-TRUNCATE TABLE #Inclusion_0;
-DROP TABLE #Inclusion_0;
-
-
-select event_id, person_id, start_date, end_date, op_start_date, op_end_date
-into #included_events
-FROM (
-  SELECT event_id, person_id, start_date, end_date, op_start_date, op_end_date, row_number() over (partition by person_id order by start_date ASC) as ordinal
-  from
-  (
-    select Q.event_id, Q.person_id, Q.start_date, Q.end_date, Q.op_start_date, Q.op_end_date, SUM(coalesce(POWER(cast(2 as bigint), I.inclusion_rule_id), 0)) as inclusion_rule_mask
-    from #qualified_events Q
-    LEFT JOIN #inclusion_events I on I.person_id = Q.person_id and I.event_id = Q.event_id
-    GROUP BY Q.event_id, Q.person_id, Q.start_date, Q.end_date, Q.op_start_date, Q.op_end_date
-  ) MG -- matching groups
-
-  -- the matching group with all bits set ( POWER(2,# of inclusion rules) - 1 = inclusion_rule_mask
-  WHERE (MG.inclusion_rule_mask = POWER(cast(2 as bigint),1)-1)
-
-) Results
-WHERE Results.ordinal = 1
-;
-
--- date offset strategy
-
-select event_id, person_id, 
-  case when DATEADD(day,1,end_date) > op_end_date then op_end_date else DATEADD(day,1,end_date) end as end_date
-INTO #strategy_ends
-from #included_events;
-
-
--- generate cohort periods into #final_cohort
-select person_id, start_date, end_date
-INTO #cohort_rows
-from ( -- first_ends
-	select F.person_id, F.start_date, F.end_date
-	FROM (
-	  select I.event_id, I.person_id, I.start_date, CE.end_date, row_number() over (partition by I.person_id, I.event_id order by CE.end_date) as ordinal
-	  from #included_events I
-	  join ( -- cohort_ends
--- cohort exit dates
--- End Date Strategy
-SELECT event_id, person_id, end_date from #strategy_ends
-
-    ) CE on I.event_id = CE.event_id and I.person_id = CE.person_id and CE.end_date >= I.start_date
-	) F
-	WHERE F.ordinal = 1
-) FE;
-
-select person_id, min(start_date) as start_date, end_date
-into #final_cohort
-from ( --cteEnds
-	SELECT
-		 c.person_id
-		, c.start_date
-		, MIN(ed.end_date) AS end_date
-	FROM #cohort_rows c
-	JOIN ( -- cteEndDates
-    SELECT
-      person_id
-      , DATEADD(day,-1 * 0, event_date)  as end_date
-    FROM
-    (
-      SELECT
-        person_id
-        , event_date
-        , event_type
-        , SUM(event_type) OVER (PARTITION BY person_id ORDER BY event_date, event_type ROWS UNBOUNDED PRECEDING) AS interval_status
-      FROM
-      (
-        SELECT
-          person_id
-          , start_date AS event_date
-          , -1 AS event_type
-        FROM #cohort_rows
-
-        UNION ALL
-
-
-        SELECT
-          person_id
-          , DATEADD(day,0,end_date) as end_date
-          , 1 AS event_type
-        FROM #cohort_rows
-      ) RAWDATA
-    ) e
-    WHERE interval_status = 0
-  ) ed ON c.person_id = ed.person_id AND ed.end_date >= c.start_date
-	GROUP BY c.person_id, c.start_date
-) e
-group by person_id, end_date
-;
-
-DELETE FROM @target_database_schema.@target_cohort_table where cohort_definition_id = @target_cohort_id;
-INSERT INTO @target_database_schema.@target_cohort_table (cohort_definition_id, subject_id, cohort_start_date, cohort_end_date)
-select @target_cohort_id as cohort_definition_id, person_id, start_date, end_date 
-FROM #final_cohort CO
-;
-
-
-
-
-TRUNCATE TABLE #strategy_ends;
-DROP TABLE #strategy_ends;
-
-
-TRUNCATE TABLE #cohort_rows;
-DROP TABLE #cohort_rows;
-
-TRUNCATE TABLE #final_cohort;
-DROP TABLE #final_cohort;
-
-TRUNCATE TABLE #inclusion_events;
-DROP TABLE #inclusion_events;
-
-TRUNCATE TABLE #qualified_events;
-DROP TABLE #qualified_events;
-
-TRUNCATE TABLE #included_events;
-DROP TABLE #included_events;
-
-TRUNCATE TABLE #Codesets;
-DROP TABLE #Codesets;
-","{
-	""cdmVersionRange"" : "">=5.0.0"",
-	""PrimaryCriteria"" : {
-		""CriteriaList"" : [
-			{
-				""ConditionOccurrence"" : {
-					""CodesetId"" : 2,
-					""ConditionTypeExclude"" : false
-				}
-			}
-		],
-		""ObservationWindow"" : {
-			""PriorDays"" : 0,
-			""PostDays"" : 0
-		},
-		""PrimaryCriteriaLimit"" : {
-			""Type"" : ""All""
-		}
-	},
-	""ConceptSets"" : [
-		{
-			""id"" : 2,
-			""name"" : ""Stevens-Johnson syndrome or TEN"",
-			""expression"" : {
-				""items"" : [
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 35625857,
-							""CONCEPT_NAME"" : ""Stevens-Johnson syndrome, toxic epidermal necrolysis spectrum"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""768946000"",
-							""DOMAIN_ID"" : ""Condition"",
-							""VOCABULARY_ID"" : ""SNOMED"",
-							""CONCEPT_CLASS_ID"" : ""Clinical Finding""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : true,
-						""includeMapped"" : false
-					}
-				]
-			}
-		},
-		{
-			""id"" : 3,
-			""name"" : ""Emergency room or Inpatient Visit"",
-			""expression"" : {
-				""items"" : [
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 262,
-							""CONCEPT_NAME"" : ""Emergency Room and Inpatient Visit"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""ERIP"",
-							""DOMAIN_ID"" : ""Visit"",
-							""VOCABULARY_ID"" : ""Visit"",
-							""CONCEPT_CLASS_ID"" : ""Visit""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : true,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 9203,
-							""CONCEPT_NAME"" : ""Emergency Room Visit"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""ER"",
-							""DOMAIN_ID"" : ""Visit"",
-							""VOCABULARY_ID"" : ""Visit"",
-							""CONCEPT_CLASS_ID"" : ""Visit""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : true,
-						""includeMapped"" : false
-					},
-					{
-						""concept"" : {
-							""CONCEPT_ID"" : 9201,
-							""CONCEPT_NAME"" : ""Inpatient Visit"",
-							""STANDARD_CONCEPT"" : ""S"",
-							""STANDARD_CONCEPT_CAPTION"" : ""Standard"",
-							""INVALID_REASON"" : ""V"",
-							""INVALID_REASON_CAPTION"" : ""Valid"",
-							""CONCEPT_CODE"" : ""IP"",
-							""DOMAIN_ID"" : ""Visit"",
-							""VOCABULARY_ID"" : ""Visit"",
-							""CONCEPT_CLASS_ID"" : ""Visit""
-						},
-						""isExcluded"" : false,
-						""includeDescendants"" : true,
-						""includeMapped"" : false
-					}
-				]
-			}
-		}
-	],
-	""QualifiedLimit"" : {
-		""Type"" : ""All""
-	},
-	""ExpressionLimit"" : {
-		""Type"" : ""First""
-	},
-	""InclusionRules"" : [
-		{
-			""name"" : ""Visit is Inpatient or Emergency Room"",
-			""expression"" : {
-				""Type"" : ""ALL"",
-				""CriteriaList"" : [
-					{
-						""Criteria"" : {
-							""VisitOccurrence"" : {
-								""CodesetId"" : 3,
-								""VisitTypeExclude"" : false
-							}
-						},
-						""StartWindow"" : {
-							""Start"" : {
-								""Coeff"" : -1
-							},
-							""End"" : {
-								""Days"" : 0,
-								""Coeff"" : -1
-							},
-							""UseIndexEnd"" : false,
-							""UseEventEnd"" : false
-						},
-						""EndWindow"" : {
-							""Start"" : {
-								""Days"" : 0,
-								""Coeff"" : 1
-							},
-							""End"" : {
-								""Coeff"" : 1
-							},
-							""UseIndexEnd"" : false,
-							""UseEventEnd"" : true
-						},
-						""RestrictVisit"" : false,
-						""IgnoreObservationPeriod"" : false,
-						""Occurrence"" : {
-							""Type"" : 2,
-							""Count"" : 1,
-							""IsDistinct"" : false
-						}
-					}
-				],
-				""DemographicCriteriaList"" : [],
-				""Groups"" : []
-			}
-		}
-	],
-	""EndStrategy"" : {
-		""DateOffset"" : {
-			""DateField"" : ""EndDate"",
-			""Offset"" : 1
-		}
-	},
-	""CensoringCriteria"" : [],
-	""CollapseSettings"" : {
-		""CollapseType"" : ""ERA"",
-		""EraPad"" : 0
-	},
-	""CensorWindow"" : {}
-}","source: O222, 9967
-hashTag: #ASSURE, #Outcome, #ASSURE-Outcome, #DME;
-submitter: Gowtham A. Rao, Azza A Shoaibi, Dmytro Dymshyts 
-ohdsi: Pending
-logic: Earliest event of Stevens-Johnson syndrome, Toxic epidermal necrolysis spectrum, indexed on diagnosis of Stevens-Johnson syndrome, Toxic epidermal necrolysis spectrum.  Restricting to events overlapping an inpatient or ER visit. Cohort exist is 1 day post cohort end date. ",FALSE
