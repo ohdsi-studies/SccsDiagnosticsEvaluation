@@ -4,6 +4,12 @@ library(dplyr)
 
 folder <- "SimulationStudies"
 
+twoMetrics <- function(data) {
+  data <- data |>
+    filter(metric %in% c("Coverage", "Fraction failing diag."))
+  return(data)
+}
+
 # Temporal stability -------------------------------------------------------------------------------
 results <- readr::read_csv(file.path(folder, "TemporalStabilityResults.csv"))
 
@@ -96,6 +102,30 @@ ggplot(vizData, aes(x = value, y = 1, color = trueRr)) +
   )
 ggsave(file.path(folder, "TemporalStabilityResults.png"), width = 7, height = 4.5)
 
+vizData <- twoMetrics(vizData)
+guides <- twoMetrics(guides)
+ggplot(vizData, aes(x = value, y = 1, color = trueRr)) +
+  geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides) +
+  geom_point(alpha = 0.75) +
+  scale_linetype(guide = "none") + 
+  scale_color_manual("True IRR", values = c("1" = "#336B91",
+                                            "2" = "#11A08A",
+                                            "4" = "#EB6622")) + 
+  scale_x_continuous(breaks = c(-0.5, 0, 0.5, 1, 1.5, 2), 
+                     label = c("-0.5", "0", "0.5", "1", "1.5", "2")) +
+  scale_y_continuous(breaks = 1) + 
+  facet_nested(temporality + exposureTrend ~ metric, scales = "free", strip = strip_theme) +
+  theme(
+    panel.spacing.y = unit(0.1, "lines"),
+    axis.text.y = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_blank(),
+    legend.position = "top"
+  )
+ggsave(file.path(folder, "TemporalStabilityResults2Metrics.png"), width = 5, height = 4.5)
+
 # Adjusted
 vizData <- bind_rows(
   results |>
@@ -184,6 +214,29 @@ ggplot(vizData, aes(x = value, y = 1, color = trueRr)) +
   )
 ggsave(file.path(folder, "TemporalStabilityResultsAdjusted.png"), width = 7, height = 5)
 
+vizData <- twoMetrics(vizData)
+guides <- twoMetrics(guides)
+ggplot(vizData, aes(x = value, y = 1, color = trueRr)) +
+  geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides) +
+  geom_point(alpha = 0.75) +
+  scale_linetype(guide = "none") + 
+  scale_color_manual("True IRR", values = c("1" = "#336B91",
+                                            "2" = "#11A08A",
+                                            "4" = "#EB6622")) + 
+  scale_x_continuous(breaks = c(-0.5, 0, 0.5, 1, 1.5, 2), 
+                     label = c("-0.5", "0", "0.5", "1", "1.5", "2")) +
+  scale_y_continuous(breaks = 1) + 
+  facet_nested(temporality + exposureTrend ~ metric, scales = "free", strip = strip_theme) +
+  theme(
+    panel.spacing.y = unit(0.1, "lines"),
+    axis.text.y = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_blank(),
+    legend.position = "top"
+  )
+ggsave(file.path(folder, "TemporalStabilityResultsAdjusted2Metrics.png"), width = 5, height = 5)
 
 # Rare events --------------------------------------------------------------------------------------
 results <- readr::read_csv(file.path(folder, "RareOutcomeResults.csv"))
@@ -261,8 +314,31 @@ ggplot(vizData, aes(x = value, y = 1, color = trueRr)) +
     panel.grid.major.y = element_blank(),
     legend.position = "top"
   )
-
 ggsave(file.path(folder, "RareOutcomeResults.png"), width = 7, height = 3.5)
+
+vizData <- twoMetrics(vizData)
+guides <- twoMetrics(guides)
+ggplot(vizData, aes(x = value, y = 1, color = trueRr)) +
+  geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides) +
+  geom_point(alpha = 0.75) +
+  scale_linetype(guide = "none") + 
+  scale_color_manual("True IRR", values = c("1" = "#336B91",
+                                            "2" = "#11A08A",
+                                            "4" = "#EB6622")) + 
+  scale_x_continuous(breaks = c(-0.5, 0, 0.5, 1, 1.5, 2), 
+                     label = c("-0.5", "0", "0.5", "1", "1.5", "2")) +
+  scale_y_continuous(breaks = 1) + 
+  facet_nested(baselineRate + exposureTrend ~ metric, scales = "free", strip = strip_theme) +
+  theme(
+    panel.spacing.y = unit(0.1, "lines"),
+    axis.text.y = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_blank(),
+    legend.position = "top"
+  )
+ggsave(file.path(folder, "RareOutcomeResults2Metrics.png"), width = 5, height = 3.5)
 
 # End of observation -------------------------------------------------------------------------------
 results <- readr::read_csv(file.path(folder, "EndOfObservationResults.csv"))
@@ -344,9 +420,31 @@ ggplot(vizData, aes(x = value, y = 1, color = trueRr)) +
     panel.grid.major.y = element_blank(),
     legend.position = "top"
   )
-
 ggsave(file.path(folder, "EndOfObservationResults.png"), width = 7, height = 5)
 
+vizData <- twoMetrics(vizData)
+guides <- twoMetrics(guides)
+ggplot(vizData, aes(x = value, y = 1, color = trueRr)) +
+  geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides) +
+  geom_point(alpha = 0.75) +
+  scale_linetype(guide = "none") + 
+  scale_color_manual("True IRR", values = c("1" = "#336B91",
+                                            "2" = "#11A08A",
+                                            "4" = "#EB6622")) + 
+  scale_x_continuous(breaks = c(-0.5, 0, 0.5, 1, 1.5, 2), 
+                     label = c("-0.5", "0", "0.5", "1", "1.5", "2")) +
+  scale_y_continuous(breaks = 1) + 
+  facet_nested(censorType + censorStrength + exposureTrend ~ metric, scales = "free", strip = strip_theme) +
+  theme(
+    panel.spacing.y = unit(0.1, "lines"),
+    axis.text.y = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_blank(),
+    legend.position = "top"
+  )
+ggsave(file.path(folder, "EndOfObservationResults2Metrics.png"), width = 5, height = 5)
 # End of exposure -------------------------------------------------------------------------------
 results <- readr::read_csv(file.path(folder, "EndOfExposureResults.csv"))
 
@@ -434,6 +532,32 @@ ggplot(subset, aes(x = value, y = 1, color = trueRr, shape = uniformAttributable
   )
 ggsave(file.path(folder, "EndOfExposureResultsTemporary.png"), width = 7, height = 5)
 
+subset <- twoMetrics(subset)
+guides2Metrics <- twoMetrics(guides)
+ggplot(subset, aes(x = value, y = 1, color = trueRr, shape = uniformAttributableRisk)) +
+  geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides2Metrics) +
+  geom_point(alpha = 0.75) +
+  scale_linetype(guide = "none") + 
+  scale_shape_manual("Hazard curve", values = c("Flat" = 16,
+                                                "Peaked" = 17)) +
+  scale_color_manual("True IRR", values = c("1" = "#336B91",
+                                            "2" = "#11A08A",
+                                            "4" = "#EB6622")) + 
+  scale_x_continuous(breaks = c(-0.5, 0, 0.5, 1, 1.5, 2), 
+                     label = c("-0.5", "0", "0.5", "1", "1.5", "2")) +
+  scale_y_continuous(breaks = 1) + 
+  facet_nested(censorType + censorStrength + exposureTrend ~ metric, scales = "free", strip = strip_theme) +
+  theme(
+    panel.spacing.y = unit(0.1, "lines"),
+    axis.text.y = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_blank(),
+    legend.position = "top"
+  )
+ggsave(file.path(folder, "EndOfExposureResultsTemporary2Metrics.png"), width = 6, height = 5)
+
 subset <- vizData |> 
   filter(censorType %in% c("None", "Reverse causality")) |>
   mutate(censorType = factor(censorType, levels = c("None", "Reverse causality")),
@@ -460,5 +584,25 @@ ggplot(subset, aes(x = value, y = 1, color = trueRr)) +
   )
 ggsave(file.path(folder, "ReverseCausality.png"), width = 7, height = 3.5)
 
-
-
+subset <- twoMetrics(subset)
+ggplot(subset, aes(x = value, y = 1, color = trueRr)) +
+  geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides2Metrics) +
+  geom_point(alpha = 0.75) +
+  scale_linetype(guide = "none") + 
+  scale_color_manual("True IRR", values = c("1" = "#336B91",
+                                            "2" = "#11A08A",
+                                            "4" = "#EB6622")) + 
+  scale_x_continuous(breaks = c(-0.5, 0, 0.5, 1, 1.5, 2), 
+                     label = c("-0.5", "0", "0.5", "1", "1.5", "2")) +
+  scale_y_continuous(breaks = 1) + 
+  facet_nested(censorType + censorStrength + exposureTrend ~ metric, scales = "free", strip = strip_theme) +
+  theme(
+    panel.spacing.y = unit(0.1, "lines"),
+    axis.text.y = element_blank(),
+    axis.title = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.y = element_blank(),
+    legend.position = "top"
+  )
+ggsave(file.path(folder, "ReverseCausality2Metrics.png"), width = 5, height = 3.5)
