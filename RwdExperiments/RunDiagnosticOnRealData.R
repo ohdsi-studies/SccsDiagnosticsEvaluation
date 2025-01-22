@@ -52,7 +52,7 @@ targetOutcomes <- read_csv("RwdExperiments/targetOutcomes.csv")
 cohorts <- read_csv("RwdExperiments/CohortsToCreate.csv")
 connection <- DatabaseConnector::connect(connectionDetails)
 
-# dbi = 1
+# dbi = 2
 for (dbi in 1:nrow(databases)) {
   database <- databases[dbi, ]
   writeLines(sprintf("*** Creating cohorts in %s ***", database$name))
@@ -124,11 +124,21 @@ fitAndSaveModel <- function(row, database, folder) {
                                       outcomeId = row$outcomeId,
                                       firstOutcomeOnly = row$firstOutcomeOnly,
                                       naivePeriod = 180)
-    covTarget <- createEraCovariateSettings(label = "Exposure of interest",
-                                            includeEraIds = row$targetId,
-                                            start = 1,
-                                            end = 0,
-                                            endAnchor = "era end")
+    if (row$timeAtRisk == "28 days") {
+      covTarget <- createEraCovariateSettings(label = "Exposure of interest",
+                                              includeEraIds = row$targetId,
+                                              start = 1,
+                                              end = 28,
+                                              endAnchor = "era start")
+    } else if (row$timeAtRisk == "On treatment") {
+      covTarget <- createEraCovariateSettings(label = "Exposure of interest",
+                                              includeEraIds = row$targetId,
+                                              start = 1,
+                                              end = 0,
+                                              endAnchor = "era end")
+    } else {
+      stop("Unknown time at risk: ", row$timeAtRisk)
+    }
     covPreTarget <- createEraCovariateSettings(label = "Pre-exposure",
                                                includeEraIds = row$targetId,
                                                start = -60,
@@ -265,8 +275,8 @@ fitAndSaveModel <- function(row, database, folder) {
 cluster <- ParallelLogger::makeCluster(8)
 ParallelLogger::clusterRequire(cluster, "SelfControlledCaseSeries")
 for (dbi in 1:nrow(databases)) {
-  writeLines(sprintf("Fitting models and computing diagnosics in %s", database$name))
   database <- databases[dbi, ]
+  writeLines(sprintf("Fitting models and computing diagnosics in %s", database$name))
   rows <- split(targetOutcomes, seq_len(nrow(targetOutcomes)))
   ParallelLogger::clusterApply(cluster, rows, fitAndSaveModel, database = database, folder = folder)
 }

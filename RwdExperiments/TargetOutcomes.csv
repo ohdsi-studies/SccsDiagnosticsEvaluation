@@ -1,14 +1,12 @@
-﻿diagnostic,type,indicationId,indicationName,targetId,targetName,outcomeId,outcomeName,splines,firstOutcomeOnly,extra
-Temporal instability,Positive,,,18885,Flu vaccine,18901,Allergic rhinitis,FALSE,FALSE,No splines
-Temporal instability,Negative,,,18885,Flu vaccine,14964,Non-small cell lung cancer (NSCLC),TRUE,TRUE,
-Rare disease,Positive,17583,Major depressive disorder,7561,Sertraline,7890,Cough,TRUE,TRUE,
-Rare disease,Negative,17583,Major depressive disorder,7561,Sertraline,18884,Rhabdomyolysis ,TRUE,TRUE,
-Event-dependent observation - fatal outcome,Positive,,,18119,Domperidone ,10707,Sudden cardiac arrest or death,TRUE,TRUE,
-Event-dependent observation - fatal outcome,Negative,,,18119,Domperidone ,18882,Epistaxis,TRUE,TRUE,
-Event-dependent observation – first-to-last observation periods,,,,6956,Atorvastatin,17151,GI bleed,TRUE,TRUE,Contrast OptumEHR with other DBs
-Reverse causality,Positive,,,7445,Omeprazole,17151,GI bleed,TRUE,TRUE,
-Reverse causality,Negative,,,7445,Omeprazole,16751,Motion sickness,TRUE,TRUE,
-Temporary contra-indication,Positive,,,18885,Flu vaccine,2088,Hemorrhagic stroke,TRUE,TRUE,
-Temporary contra-indication,Negative,,,18885,Flu vaccine,18883,Low back pain,TRUE,TRUE,
-Permanent contra-indication (with immediate discontinuation),Positive,14704,Hypertension,5773,Lisinopril,18881,Angioedema,TRUE,TRUE,
-Permanent contra-indication (with immediate discontinuation),Negative,14704,Hypertension,5773,Lisinopril,17583,Major depressive disorder,TRUE,TRUE,
+diagnostic,type,indicationId,indicationName,targetId,targetName,outcomeId,outcomeName,splines,firstOutcomeOnly,timeAtRisk,extra
+Temporal instability,Positive,,,18885,Flu vaccine,18901,Allergic rhinitis,FALSE,FALSE,28 days,No splines
+Temporal instability,Negative,,,18885,Flu vaccine,14964,Non-small cell lung cancer (NSCLC),TRUE,TRUE,28 days,
+Rare disease,Positive,17583,Major depressive disorder,7561,Sertraline,7890,Cough,TRUE,TRUE,On treatment,
+Rare disease,Negative,17583,Major depressive disorder,7561,Sertraline,18884,Rhabdomyolysis ,TRUE,TRUE,On treatment,
+Event-dependent observation - fatal outcome,Positive,,,18119,Domperidone ,10707,Sudden cardiac arrest or death,TRUE,TRUE,On treatment,
+Event-dependent observation - fatal outcome,Negative,,,18119,Domperidone ,18882,Epistaxis,TRUE,TRUE,On treatment,
+Event-dependent observation – first-to-last observation periods,,,,6956,Atorvastatin,17151,GI bleed,TRUE,TRUE,On treatment,Contrast OptumEHR with other DBs
+Reverse causality,Positive,,,7445,Omeprazole,17151,GI bleed,TRUE,TRUE,On treatment,
+Reverse causality,Negative,,,7445,Omeprazole,16751,Motion sickness,TRUE,TRUE,On treatment,
+Permanent contra-indication,Positive,,,18885,Flu vaccine,609,Guillain Barre syndrome,TRUE,TRUE,28 days,
+Permanent contra-indication,Negative,,,18885,Flu vaccine,18883,Low back pain,TRUE,TRUE,28 days,

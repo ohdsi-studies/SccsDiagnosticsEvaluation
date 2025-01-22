@@ -75,7 +75,7 @@ ggsave(file.path(folder, "RareOutcomeResults.png"), width = 5, height = 5)
 vizData <- results |>
   filter(grepl("Event-dependent observation - fatal", diagnostic)) |>
   mutate(Diagnostic = if_else(edoP < 0.05, "FAIL", "PASS"),
-         example = paste(targetName, outcomeName, sep = " - ")) |>
+         example = paste(targetName, outcomeName, sep = " -\n")) |>
   mutate(database = factor(database, levels = sort(unique(results$database), decreasing = TRUE)))
 
 vizData <- bind_rows(
