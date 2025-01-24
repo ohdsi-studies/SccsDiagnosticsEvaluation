@@ -39,7 +39,7 @@ databases <- tibble(
 maxCores <- 12
 
 # Create negative control cohorts ----------------------------------------------
-dbi = 8
+dbi = 2
 # for (dbi in 1:nrow(databases)) {
 database <- databases[dbi, ]
 writeLines(sprintf("*** Creating negative control cohorts in %s ***", database$name))
@@ -114,7 +114,7 @@ createSccsIntervalDataArgs <- createCreateSccsIntervalDataArgs(
   calendarTimeCovariateSettings = calendarTimeSettings
 )
 
-fitSccsModelArgs <- createFitSccsModelArgs()
+fitSccsModelArgs <- createFitSccsModelArgs(profileBounds = NULL)
 
 sccsAnalysis <- createSccsAnalysis(
   analysisId = 1,
