@@ -28,7 +28,7 @@ for (i in seq_len(nrow(ref))) {
   refRow <- ref[i, ]
   model <- readRDS(file.path(database$folder, refRow$sccsModelFile))
   studyPop <- readRDS(file.path(database$folder, refRow$studyPopFile))
-  if (is.null(model$estimates) || !1000 %in% model$estimates$covariateId) {
+  if (is.null(model$estimates) || !1001 %in% model$estimates$covariateId) {
     preExposure <- tibble(preExpLogRr = NA, preExpLogLb95 = NA, preExpLogUb95 = NA)
   } else {
     preExposure <- model$estimates |>

@@ -39,7 +39,7 @@ databases <- tibble(
 maxCores <- 12
 
 # Create negative control cohorts ----------------------------------------------
-dbi = 9
+dbi = 8
 # for (dbi in 1:nrow(databases)) {
 database <- databases[dbi, ]
 writeLines(sprintf("*** Creating negative control cohorts in %s ***", database$name))
@@ -65,7 +65,7 @@ synthesizeReferenceSetPositiveControls(
   cdmDatabaseSchema = database$cdmDatabaseSchema,
   outcomeDatabaseSchema = database$cohortDatabaseSchema,
   outcomeTable = database$outcomeTable,
-  maxCores = 1,#maxCores,
+  maxCores = maxCores,
   workFolder = database$folder,
   referenceSet = "ohdsiMethodsBenchmark"
 )
@@ -86,7 +86,7 @@ createStudyPopulationArgs <- createCreateStudyPopulationArgs(
 covarExposureOfInt <- createEraCovariateSettings(
   label = "Exposure of interest",
   includeEraIds = "exposureId",
-  start = 0,
+  start = 1,
   end = 0,
   endAnchor = "era end",
   profileLikelihood = FALSE,
