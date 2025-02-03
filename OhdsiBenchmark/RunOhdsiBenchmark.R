@@ -38,6 +38,7 @@ databases <- tibble(
          folder = file.path(folder, name))
 maxCores <- 12
 
+
 # Create negative control cohorts ----------------------------------------------
 dbi = 2
 # for (dbi in 1:nrow(databases)) {
@@ -67,6 +68,7 @@ synthesizeReferenceSetPositiveControls(
   outcomeTable = database$outcomeTable,
   maxCores = maxCores,
   workFolder = database$folder,
+  riskWindowStart = 1,
   referenceSet = "ohdsiMethodsBenchmark"
 )
 # }
