@@ -15,84 +15,51 @@ databases <- tibble(
   mutate(folder = file.path(folder, name))
 maxCores <- 12
 
-# Compute diagnostics ----------------------------------------------------------
-dbi = 5
-# for (dbi in 1:nrow(databases)) {
-database <- databases[dbi, ]
-writeLines(sprintf("*** Computing diagnostics for %s ***", database$name))
-
-resultRows <- list()
-ref <- getFileReference(database$folder)
-pb <- txtProgressBar(style = 3)
-for (i in seq_len(nrow(ref))) {
-  refRow <- ref[i, ]
-  model <- readRDS(file.path(database$folder, refRow$sccsModelFile))
-  studyPop <- readRDS(file.path(database$folder, refRow$studyPopFile))
-  if (is.null(model$estimates) || !1001 %in% model$estimates$covariateId) {
-    preExposure <- tibble(preExpLogRr = NA, preExpLogLb95 = NA, preExpLogUb95 = NA)
-  } else {
-    preExposure <- model$estimates |>
-      filter(covariateId == 1001) |>
-      select(preExpLogRr = logRr, preExpLogLb95 = logLb95, preExpLogUb95 = logUb95)
-  }
-  preExposure <- preExposure |>
-    mutate(passPreExposure = (is.na(preExpLogLb95) | is.na(preExpLogUb95)) || (preExpLogLb95 < log(1.25) && preExpLogUb95 > log(0.8)))
-  
-  endOfObservation <- computeEventDependentObservation(model) |>
-    mutate(stable = if_else(is.na(stable), TRUE, stable)) |>
-    select(endOfObsRatio = ratio, endOfObsP = p, passEndOfObservation = stable)
-  
-  timeStability <- computeTimeStability(studyPopulation = studyPop, sccsModel = model) |>
-    select(timeStabRatio = ratio, timeStabP = p, passTimeStability = stable)
-  
-  rareOutcome <- checkRareOutcomeAssumption(studyPopulation = studyPop) |>
-    mutate(rare = if_else(is.na(rare), TRUE, rare)) |>
-    select(outcomeProportion, passRareOutcome = rare)
-  
-  resultRow <- refRow |>
-    select(exposureId, outcomeId) |>
-    bind_cols(preExposure, endOfObservation, timeStability, rareOutcome)
-  
-  resultRows[[i]] <- resultRow
-  setTxtProgressBar(pb, i / nrow(ref))
-}
-close(pb)
-resultRows <- bind_rows(resultRows)
-resultRows <- resultRows |>
-  mutate(passAll = passPreExposure & passEndOfObservation & passTimeStability & passRareOutcome)
-saveRDS(resultRows, file.path(database$folder, "Diagnostics.rds"))
-mean(resultRows$passAll)
 
 # Compute performance metrics before and after diagnostics ---------------------
 dbi = 5
 # for (dbi in 1:nrow(databases)) {
 database <- databases[dbi, ]
 writeLines(sprintf("*** Computing performance for %s ***", database$name))
-estimates <- readr::read_csv(file.path(database$folder, "export", sprintf("estimates_SCCS_%s.csv", database$name)))
-diagnostics <- readRDS(file.path(database$folder, "Diagnostics.rds"))
 
+estimates <- readr::read_csv(file.path("OhdsiBenchmark", sprintf("estimates_%s.csv", database$name)))
+diagnostics <- readr::read_csv(file.path("OhdsiBenchmark", sprintf("diagnostics_%s.csv", database$name)))
+
+# Subset to estimates with sufficient power:
 subset <- estimates  |>
   filter(!is.na(mdrrTarget), mdrrTarget < 1.25)
 
+allMetrics <- list()
+
 # Performance before calibration
-MethodEvaluation::computeMetrics(
+metrics <- MethodEvaluation::computeMetrics(
   logRr = subset$logRr, 
   seLogRr = subset$seLogRr,
   ci95Lb = subset$ci95Lb, 
   ci95Ub = subset$ci95Ub,
   trueLogRr = log(subset$trueEffectSize)
-) |>
-  c(count = nrow(subset))
+)
+allMetrics[[1]] <- metrics |>
+  t() |>
+  as_tibble() |>
+  mutate(count = nrow(subset),
+         calibration = FALSE,
+         diagnostics = FALSE)
 
 # Performance after calibration
-MethodEvaluation::computeMetrics(
+metrics <- MethodEvaluation::computeMetrics(
   logRr = subset$calLogRr, 
   seLogRr = subset$calSeLogRr,
   ci95Lb = subset$calCi95Lb, 
   ci95Ub = subset$calCi95Ub,
   trueLogRr = log(subset$trueEffectSize)
-) |>
-  c(count = nrow(subset))
+) 
+allMetrics[[2]] <- metrics |>
+  t() |>
+  as_tibble() |>
+  mutate(count = nrow(subset),
+         calibration = TRUE,
+         diagnostics = FALSE)
 
 # Filter to those passing diagnostics
 subset <- subset |> 
@@ -102,14 +69,19 @@ subset <- subset |>
              by = join_by(targetId, outcomeId))
 
 # Performance before calibration
-MethodEvaluation::computeMetrics(
+metrics <- MethodEvaluation::computeMetrics(
   logRr = subset$logRr, 
   seLogRr = subset$seLogRr,
   ci95Lb = subset$ci95Lb, 
   ci95Ub = subset$ci95Ub,
   trueLogRr = log(subset$trueEffectSize)
-) |>
-  c(count = nrow(subset))
+)
+allMetrics[[3]] <- metrics |>
+  t() |>
+  as_tibble() |>
+  mutate(count = nrow(subset),
+         calibration = FALSE,
+         diagnostics = TRUE)
 
 # Performance after calibration. First need to recalibrate using subset passing diagnostics
 analysisRef <- data.frame(
@@ -121,39 +93,59 @@ analysisRef <- data.frame(
   nesting = TRUE,
   firstExposureOnly = FALSE
 )
-allControls <- read.csv(file.path(database$folder, "allControls.csv"))
+controls <- subset[, c(
+  "outcomeId",
+  "comparatorId",
+  "targetId",
+  "targetName",
+  "comparatorName",
+  "nestingId",
+  "nestingName",
+  "outcomeName",
+  "type",
+  "targetEffectSize",
+  "trueEffectSize",
+  "trueEffectSizeFirstExposure",
+  "oldOutcomeId",
+  "mdrrTarget",
+  "mdrrComparator"
+)]
+tempFolder <- tempfile("exportFiltered")
 MethodEvaluation::packageOhdsiBenchmarkResults(
   estimates = subset,
-  controlSummary = allControls,
+  controlSummary = controls,
   analysisRef = analysisRef,
   databaseName = database$name,
-  exportFolder = file.path(database$folder, "exportFiltered")
+  exportFolder = tempFolder
 )
-estimates <- readr::read_csv(file.path(database$folder, "exportFiltered", sprintf("estimates_SCCS_%s.csv", database$name)))
-subset <- estimates |> 
+estimatesRecal <- readr::read_csv(file.path(tempFolder, sprintf("estimates_SCCS_%s.csv", database$name)))
+unlink(tempFolder, force = TRUE)
+subset <- estimatesRecal |> 
   filter(!is.na(mdrrTarget), mdrrTarget < 1.25) |>
   inner_join(diagnostics |>
                filter(passAll) |>
                rename(targetId = exposureId),
              by = join_by(targetId, outcomeId))
-MethodEvaluation::computeMetrics(
+metrics <- MethodEvaluation::computeMetrics(
   logRr = subset$calLogRr, 
   seLogRr = subset$calSeLogRr,
   ci95Lb = subset$calCi95Lb, 
   ci95Ub = subset$calCi95Ub,
   trueLogRr = log(subset$trueEffectSize)
 ) 
-
-
-
-x <- subset |>
-  filter(trueEffectSize == 1) |>
-  select(targetId, targetName, outcomeId, outcomeName, ci95Lb, ci95Ub)
+allMetrics[[4]] <- metrics |>
+  t() |>
+  as_tibble() |>
+  mutate(count = nrow(subset),
+         calibration = TRUE,
+         diagnostics = TRUE)
+allMetrics <- bind_rows(allMetrics)
+allMetrics
 
 # Plot filtering of negative controls ------------------------------------------
 library(ggplot2)
-estimates <- readr::read_csv(file.path(database$folder, "export", sprintf("estimates_SCCS_%s.csv", database$name)))
-diagnostics <- readRDS(file.path(database$folder, "Diagnostics.rds"))
+estimates <- readr::read_csv(file.path("OhdsiBenchmark", sprintf("estimates_%s.csv", database$name)))
+diagnostics <- readr::read_csv(file.path("OhdsiBenchmark", sprintf("diagnostics_%s.csv", database$name)))
 
 subset <- estimates  |>
   filter(!is.na(mdrrTarget), mdrrTarget < 1.25, targetEffectSize == 1) |>
@@ -165,20 +157,34 @@ subset <- subset |>
              by = join_by(targetId, outcomeId))
 
 subset <- subset |>
-  arrange(rr) |>
-  mutate(y = row_number())
-ggplot(subset, aes(x = rr, xmin = ci95Lb, xmax = ci95Ub, y = y, color = passAll)) +
-  geom_errorbarh() +
-  geom_point() +
-  scale_x_log10() 
+  arrange(desc(rr)) |>
+  mutate(y = row_number(),
+         Diagnostics = if_else(passAll, "Pass", "Fail"))
 
 breaks <- c(0.1, 0.25, 0.5, 1, 2, 4, 6, 8, 10)
-ggplot(subset, aes(x = logRr, y = seLogRr, color = passAll)) +
+ggplot(subset, aes(x = logRr, xmin = log(ci95Lb), xmax = log(ci95Ub), y = y, color = Diagnostics)) +
+  geom_vline(xintercept = 0) +
+  geom_errorbarh() +
+  geom_point() +
+  scale_x_continuous("IRR", breaks = log(breaks), labels = breaks) +
+  coord_cartesian(xlim = log(c(0.1, 10))) +
+  theme(
+    panel.grid.minor = element_blank(), 
+    panel.background = element_blank(), 
+    panel.grid.major.x = element_line(color = "lightgray"), 
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks = element_blank()
+  )
+
+breaks <- c(0.1, 0.25, 0.5, 1, 2, 4, 6, 8, 10)
+ggplot(subset, aes(x = logRr, y = seLogRr, color = Diagnostics)) +
   geom_abline(intercept = 0, slope = 1/qnorm(0.025), colour = rgb(0, 0, 0), linetype = "dashed", size = 1, alpha = 0.5) +
   geom_abline(intercept = 0, slope = 1/qnorm(0.975), colour = rgb(0, 0, 0), linetype = "dashed", size = 1, alpha = 0.5) +
   geom_hline(yintercept = 0) +
   geom_point() +
   scale_x_continuous("IRR", breaks = log(breaks), labels = breaks) +
+  scale_y_continuous("Standard Error") +
   coord_cartesian(xlim = log(c(0.1, 10)), ylim = c(0, 1)) +
   theme(
     panel.grid.minor = element_blank(), 
@@ -186,22 +192,93 @@ ggplot(subset, aes(x = logRr, y = seLogRr, color = passAll)) +
     panel.grid.major = element_line(color = "lightgray"), 
     axis.ticks = element_blank()
   )
-x <- subset |> 
-  filter(exp(logRr) > 6) 
+
+# Trelissed scatterplot --------------------------------------------------------
+library(ggplot2)
+estimates <- readr::read_csv(file.path("OhdsiBenchmark", sprintf("estimates_%s.csv", database$name)))
+diagnostics <- readr::read_csv(file.path("OhdsiBenchmark", sprintf("diagnostics_%s.csv", database$name)))
+d <- estimates |> 
+  filter(!is.na(mdrrTarget), mdrrTarget < 1.25, !is.na(seLogRr)) |>
+  inner_join(diagnostics |>
+               rename(targetId = exposureId),
+             by = join_by(targetId, outcomeId)) |>
+  rename(trueRr = targetEffectSize) |>
+  mutate(logCi95lb = log(ci95Lb),
+         logCi95ub = log(ci95Ub),
+         trueLogRr = log(trueEffectSize)) |>
+  mutate(significant = logCi95lb > trueLogRr | logCi95ub < trueLogRr,
+         group = sprintf("True IRR = %s", trueRr),
+         Diagnostics = if_else(passAll, "Pass", "Fail"))
+
+dd <- d |>
+  group_by(group, trueRr) |>
+  summarise(estimateCount = n(),
+            passDiagnosticsCount = sum(passAll),
+            significantCount = sum(significant),
+            significantPassCount = sum(significant & passAll),
+            .groups = "drop") |>
+  mutate(label1 = sprintf("%d estimates\n%0.1f%% of CIs include %s",
+                          estimateCount,
+                          100 * (1 - significantCount / estimateCount),
+                          trueRr),
+         label2 = sprintf("%d (%0.1f%%) pass diagnostics\n%0.1f%% of CIs include %s",
+                          passDiagnosticsCount,
+                          100 * passDiagnosticsCount / estimateCount,
+                          100 * (1 - significantPassCount / passDiagnosticsCount),
+                          trueRr))
+
+breaks <- c(0.1, 0.25, 0.5, 1, 2, 4, 6, 10)
+theme <- element_text(colour = "#000000", size = 10)
+themeRA <- element_text(colour = "#000000", size = 10, hjust = 1)
+
+plot <- ggplot(d, aes(x = .data$logRr, y = .data$seLogRr)) +
+  geom_vline(xintercept = log(breaks), colour = "#AAAAAA", lty = 1, size = 0.5) +
+  geom_abline(aes(intercept = (-log(.data$trueRr)) / qnorm(0.025), slope = 1 / qnorm(0.025)), colour = rgb(0, 0, 0), linetype = "dashed", size = 1, alpha = 0.5, data = dd) +
+  geom_abline(aes(intercept = (-log(.data$trueRr)) / qnorm(0.975), slope = 1 / qnorm(0.975)), colour = rgb(0, 0, 0), linetype = "dashed", size = 1, alpha = 0.5, data = dd) +
+  geom_point(
+    aes(color = Diagnostics),
+    shape = 16,
+    size = 2,
+    alpha = 0.5
+  ) +
+  geom_hline(yintercept = 0) +
+  geom_label(x = log(0.15), y = 0.92, alpha = 0.8, hjust = "left", aes(label = .data$label1), size = 3.5, data = dd) +
+  geom_label(x = log(0.15), y = 0.65, alpha = 0.8, hjust = "left", aes(label = .data$label2), size = 3.5, data = dd) +
+  scale_x_continuous("IRR", limits = log(c(0.1, 10)), breaks = log(breaks), labels = breaks) +
+  scale_y_continuous("Standard Error") +
+  coord_cartesian(ylim = c(0, 1)) +
+  facet_grid(. ~ group) +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    panel.grid.major = element_blank(),
+    axis.ticks = element_blank(),
+    axis.text.y = themeRA,
+    axis.text.x = theme,
+    axis.title = theme,
+    legend.key = element_blank(),
+    plot.title = element_text(hjust = 0.5),
+    strip.text.x = theme,
+    strip.text.y = theme,
+    strip.background = element_blank(),
+    legend.position = "top"
+  )
+plot
+ggsave(file.path("OhdsiBenchmark", sprintf("ScatterPlot_%s.png", database$name)), plot = plot, width = 10, height = 3, dpi = 300)
 
 # Explore single estimate ------------------------------------------------------
 ref <- getFileReference(database$folder)
 refRow <- ref |>
-  filter(exposureId == 753626, outcomeId == 4)
+  filter(exposureId == 1797513, outcomeId == 10389)
 model <- readRDS(file.path(database$folder, refRow$sccsModelFile))
 studyPop <- readRDS(file.path(database$folder, refRow$studyPopFile))
 sccsData <- loadSccsData(file.path(database$folder, refRow$sccsDataFile))
 
-plotExposureCentered(studyPop, sccsData, exposureEraId = 753626)
+plotExposureCentered(studyPop, sccsData, exposureEraId = 1797513)
 
 covarExposureOfInt <- createEraCovariateSettings(
   label = "Exposure of interest",
-  includeEraIds = 1124300,
+  includeEraIds = 1797513,
   start = 1,
   end = 0,
   endAnchor = "era end",
@@ -210,7 +287,7 @@ covarExposureOfInt <- createEraCovariateSettings(
 
 covarPreExp <- createEraCovariateSettings(
   label = "Pre-exposure",
-  includeEraIds = 1124300,
+  includeEraIds = 1797513,
   start = -30,
   end = -1,
   endAnchor = "era start"
@@ -233,6 +310,19 @@ sccsIntervalData <- createSccsIntervalData(
 model <- fitSccsModel(sccsIntervalData, control = createControl(threads = 10), profileBounds = NULL)
 
 
+newOutcomes <- readRDS(file.path(database$folder, "signalInjection", "newOutcomes_e1797513_o72715_rr4.rds"))
+
+newOutcomes <- newOutcomes |>
+  mutate(personId = as.character(subjectId)) |>
+  inner_join(sccsData$cases |>
+               collect())
+
+personIds <- sccsData$cases |>
+  collect() |>
+  pull(personId)
+
+
+
 connection <- connect(connectionDetails)
 sql <- "
 SELECT COUNT(*) AS length_count,
@@ -242,3 +332,84 @@ WHERE drug_concept_id = 1124300
 GROUP BY DATEDIFF(DAY, drug_era_start_date, drug_era_end_date);"
 x <- renderTranslateQuerySql(connection, sql, cdm = database$cdmDatabaseSchema)
 sum(x$LENGTH_COUNT)
+
+sql <- "
+SELECT new_outcome.*
+FROM @cohort_database_schema.@cohort_table new_outcome
+LEFT JOIN (
+  SELECT * 
+  FROM @cohort_database_schema.@cohort_table 
+  WHERE cohort_definition_id = 72715
+) old_outcome
+  ON old_outcome.subject_id = new_outcome.subject_id
+    AND old_outcome.cohort_start_date = new_outcome.cohort_start_date
+WHERE new_outcome.cohort_definition_id = 10389
+  AND old_outcome.subject_id IS NULL;"
+x <- renderTranslateQuerySql(connection, sql, 
+                             cohort_database_schema = "scratch.scratch_mschuemi",
+                             cohort_table = "sccs_benchmark_outcomes_ccae",
+                             snakeCaseToCamelCase = TRUE)
+
+y <- x |> 
+  inner_join(newOutcomes |> select(subjectId))
+
+y <- x |> 
+  inner_join(newOutcomes |> 
+               mutate(cohortStartDate = as.Date(cohortStartDate)))
+
+
+sql <- "
+SELECT COUNT(*) 
+FROM @cohort_database_schema.@cohort_table 
+WHERE cohort_definition_id = 10389;"
+renderTranslateQuerySql(connection, sql, 
+                        cohort_database_schema = "scratch.scratch_mschuemi",
+                        cohort_table = "sccs_benchmark_outcomes_ccae",
+                        snakeCaseToCamelCase = TRUE)
+
+summary <- readRDS(file.path(database$folder, "signalInjection", "summary.rds"))
+
+
+newOutcomes$cohortDefinitionId <- 666
+DatabaseConnector::insertTable(
+  connection = connection,
+  tableName = "scratch.scratch_mschuemi.test",
+  data = newOutcomes,
+  dropTableIfExists = TRUE,
+  createTable = TRUE,
+  tempTable = FALSE,
+  progressBar = TRUE,
+  camelCaseToSnakeCase = TRUE
+)
+x2 <- renderTranslateQuerySql(connection, "SELECT * FROM scratch.scratch_mschuemi.test;", snakeCaseToCamelCase = TRUE)
+x3 <- x2 |>
+  inner_join(newOutcomes |> select(subjectId))
+
+newOutcomes <- newOutcomes |>
+  arrange(subjectId, cohortDefinitionId) 
+
+x2 <- x2 |>
+  arrange(subjectId, cohortDefinitionId) 
+
+i = 25
+x2$subjectId[i] == newOutcomes$subjectId[i]
+
+min(which(x2$subjectId != newOutcomes$subjectId))
+newOutcomes[42:46,]
+x2[42:46,]
+
+x3 <- x2 |>
+  mutate(subjectId = as.character(subjectId)) |>
+  inner_join(newOutcomes |>
+               mutate(subjectId = as.character(subjectId)) 
+             |> select(subjectId))
+
+sql <- "DROP TABLE  scratch.scratch_mschuemi.test;"
+executeSql(connection, sql)
+sql <- "CREATE TABLE  scratch.scratch_mschuemi.test (x FLOAT);"
+executeSql(connection, sql)
+sql <- "INSERT INTO scratch.scratch_mschuemi.test (x) VALUES (34530727601);"
+executeSql(connection, sql)
+sql <- "SELECT * FROM scratch.scratch_mschuemi.test;"
+querySql(connection, sql)
+

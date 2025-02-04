@@ -2,6 +2,11 @@
 # error and precision after calibration with or without diagnostics.
 library(MethodEvaluation)
 library(SelfControlledCaseSeries)
+
+# Which database to run on this machine:
+dbi <- 5
+
+# Overall settings -------------------------------------------------------------
 options(andromedaTempFolder = "e:/andromedaTemp")
 
 folder <- "e:/SccsDiagnosticsOhdsiBenchmark"
@@ -40,8 +45,6 @@ maxCores <- 12
 
 
 # Create negative control cohorts ----------------------------------------------
-dbi = 2
-# for (dbi in 1:nrow(databases)) {
 database <- databases[dbi, ]
 writeLines(sprintf("*** Creating negative control cohorts in %s ***", database$name))
 dir.create(database$folder, showWarnings = FALSE, recursive = TRUE)
@@ -55,10 +58,9 @@ createReferenceSetCohorts(
   workFolder = database$folder,
   referenceSet = "ohdsiMethodsBenchmark"
 )
-# }
+
 
 # Synthesize positive controls -------------------------------------------------
-# for (dbi in 1:nrow(databases)) {
 database <- databases[dbi, ]
 writeLines(sprintf("*** Synthesizing positive controls in %s ***", database$name))
 synthesizeReferenceSetPositiveControls(
@@ -71,10 +73,9 @@ synthesizeReferenceSetPositiveControls(
   riskWindowStart = 1,
   referenceSet = "ohdsiMethodsBenchmark"
 )
-# }
+
 
 # Run SCCS on benchmark --------------------------------------------------------
-
 # Create analysis settings
 getDbSccsDataArgs <- createGetDbSccsDataArgs(
   maxCasesPerOutcome = 100000
@@ -131,92 +132,115 @@ sccsAnalysisList <- list(sccsAnalysis)
 sccsMultiThreadingSettings <- createDefaultSccsMultiThreadingSettings(maxCores)
 sccsMultiThreadingSettings$fitSccsModelThreads <- 5
 
-# for (dbi in 1:nrow(databases)) {
-  database <- databases[dbi, ]
-  writeLines(sprintf("*** Running SCCS analyses in %s ***", database$name))
-  # Create exposure-outcomes of interest
-  allControls <- read.csv(file.path(database$folder, "allControls.csv"))
-  exposuresOutcomeList <- list()
-  for (i in seq_len(nrow(allControls))) {
-    exposuresOutcome <- createExposuresOutcome(
-      outcomeId = allControls$outcomeId[i],
-      exposures = list(createExposure(exposureId = allControls$targetId[i])),
-      nestingCohortId = allControls$nestingId[i]
-    )
-    exposuresOutcomeList[[i]] <- exposuresOutcome
+database <- databases[dbi, ]
+writeLines(sprintf("*** Running SCCS analyses in %s ***", database$name))
+
+# Create exposure-outcomes of interest
+allControls <- read.csv(file.path(database$folder, "allControls.csv"))
+exposuresOutcomeList <- list()
+for (i in seq_len(nrow(allControls))) {
+  exposuresOutcome <- createExposuresOutcome(
+    outcomeId = allControls$outcomeId[i],
+    exposures = list(createExposure(exposureId = allControls$targetId[i])),
+    nestingCohortId = allControls$nestingId[i]
+  )
+  exposuresOutcomeList[[i]] <- exposuresOutcome
+}
+
+runSccsAnalyses(connectionDetails = connectionDetails,
+                cdmDatabaseSchema = database$cdmDatabaseSchema,
+                exposureDatabaseSchema = database$cdmDatabaseSchema,
+                exposureTable = "drug_era",
+                outcomeDatabaseSchema = database$cohortDatabaseSchema,
+                outcomeTable = database$outcomeTable,
+                nestingCohortDatabaseSchema = database$cohortDatabaseSchema,
+                nestingCohortTable = database$nestingCohortTable,
+                outputFolder = database$folder,
+                sccsAnalysisList = sccsAnalysisList,
+                exposuresOutcomeList = exposuresOutcomeList,
+                sccsMultiThreadingSettings = sccsMultiThreadingSettings
+)
+
+resultsSummary <- getResultsSummary(database$folder)
+resultsSummary$targetId <- resultsSummary$eraId
+
+merged <- resultsSummary |>
+  select(targetId, outcomeId, rr, ci95Lb, ci95Ub, seLogRr) |>
+  inner_join(allControls |>
+               select(targetId, outcomeId, nestingId, trueEffectSize))
+exportFolder <- file.path(database$folder, "export")
+
+# Create a reference of the analysis settings:
+analysisRef <- data.frame(
+  method = "SCCS",
+  analysisId = 1,
+  description = "SCCS",
+  details = "",
+  comparative = FALSE,
+  nesting = TRUE,
+  firstExposureOnly = FALSE
+)
+packageOhdsiBenchmarkResults(
+  estimates = resultsSummary,
+  controlSummary = allControls,
+  analysisRef = analysisRef,
+  databaseName = database$name,
+  exportFolder = file.path(database$folder, "export")
+)
+
+# launchMethodEvaluationApp(exportFolder)
+
+# Compute diagnostics ----------------------------------------------------------
+database <- databases[dbi, ]
+writeLines(sprintf("*** Computing diagnostics for %s ***", database$name))
+
+resultRows <- list()
+ref <- getFileReference(database$folder)
+pb <- txtProgressBar(style = 3)
+for (i in seq_len(nrow(ref))) {
+  refRow <- ref[i, ]
+  model <- readRDS(file.path(database$folder, refRow$sccsModelFile))
+  studyPop <- readRDS(file.path(database$folder, refRow$studyPopFile))
+  if (is.null(model$estimates) || !1001 %in% model$estimates$covariateId) {
+    preExposure <- tibble(preExpLogRr = NA, preExpLogLb95 = NA, preExpLogUb95 = NA)
+  } else {
+    preExposure <- model$estimates |>
+      filter(covariateId == 1001) |>
+      select(preExpLogRr = logRr, preExpLogLb95 = logLb95, preExpLogUb95 = logUb95)
   }
+  preExposure <- preExposure |>
+    mutate(passPreExposure = (is.na(preExpLogLb95) | is.na(preExpLogUb95)) || (preExpLogLb95 < log(1.25) && preExpLogUb95 > log(0.8)))
   
-  runSccsAnalyses(connectionDetails = connectionDetails,
-                  cdmDatabaseSchema = database$cdmDatabaseSchema,
-                  exposureDatabaseSchema = database$cdmDatabaseSchema,
-                  exposureTable = "drug_era",
-                  outcomeDatabaseSchema = database$cohortDatabaseSchema,
-                  outcomeTable = database$outcomeTable,
-                  nestingCohortDatabaseSchema = database$cohortDatabaseSchema,
-                  nestingCohortTable = database$nestingCohortTable,
-                  outputFolder = database$folder,
-                  sccsAnalysisList = sccsAnalysisList,
-                  exposuresOutcomeList = exposuresOutcomeList,
-                  sccsMultiThreadingSettings = sccsMultiThreadingSettings
-  )
+  endOfObservation <- computeEventDependentObservation(model) |>
+    mutate(stable = if_else(is.na(stable), TRUE, stable)) |>
+    select(endOfObsRatio = ratio, endOfObsP = p, passEndOfObservation = stable)
   
-  resultsSummary <- getResultsSummary(database$folder)
-  resultsSummary$targetId <- resultsSummary$eraId
+  timeStability <- computeTimeStability(studyPopulation = studyPop, sccsModel = model) |>
+    select(timeStabRatio = ratio, timeStabP = p, passTimeStability = stable)
   
-  # x <- resultsSummary |>
-  #   filter(abs(logRr) > 4, seLogRr < 0.1)
-  # allControls |>
-  #   filter(outcomeId == x$outcomeId, targetId == x$eraId)
-    
+  rareOutcome <- checkRareOutcomeAssumption(studyPopulation = studyPop) |>
+    mutate(rare = if_else(is.na(rare), TRUE, rare)) |>
+    select(outcomeProportion, passRareOutcome = rare)
   
-  merged <- resultsSummary |>
-    select(targetId, outcomeId, rr, ci95Lb, ci95Ub, seLogRr) |>
-    inner_join(allControls |>
-                 select(targetId, outcomeId, nestingId, trueEffectSize))
-  exportFolder <- file.path(database$folder, "export")
-  # Create a reference of the analysis settings:
-  analysisRef <- data.frame(
-    method = "SCCS",
-    analysisId = 1,
-    description = "SCCS",
-    details = "",
-    comparative = FALSE,
-    nesting = TRUE,
-    firstExposureOnly = FALSE
-  )
-  packageOhdsiBenchmarkResults(
-    estimates = resultsSummary,
-    controlSummary = allControls,
-    analysisRef = analysisRef,
-    databaseName = database$name,
-    exportFolder = file.path(database$folder, "export")
-  )
+  resultRow <- refRow |>
+    select(exposureId, outcomeId) |>
+    bind_cols(preExposure, endOfObservation, timeStability, rareOutcome)
   
-launchMethodEvaluationApp(exportFolder)
-  # ref <- getFileReference(database$folder)
-  # which(ref$outcomeId == 4 & ref$exposureId == 989878)
-  # 
-  # sccsData <- loadSccsData(file.path(database$folder, ref$sccsDataFile[6]))
-  # x <- sccsData$eras |>
-  #   filter(eraType == "rx") |>
-  #   collect()
-  # x <- sccsData$eras |>
-  #   filter(eraType == "hoi") |>
-  #   collect()
-  # studyPop <- readRDS(file.path(database$folder, ref$studyPopFile[6]))
-  # # studyPop <- createStudyPopulation(sccsData, outcomeId = 4, firstOutcomeOnly = TRUE, naivePeriod = 180)
-  # model <- readRDS(file.path(database$folder, ref$sccsModelFile[6]))
-  # getAttritionTable(model)
-  # plotEventToCalendarTime(studyPop, model)
-  # computeEventDependentObservation(model)
-  # model
-  # plotExposureCentered(studyPop, sccsData, 989878)
-  # 
-# 
-# 
-# conn <- connect(connectionDetails)
-# sql <- "SELECT * FROM jmdc.cdm_jmdc_v3044.drug_era WHERE drug_concept_id = 902427 LIMIT 1000;"
-# y <- querySql(conn, sql, integer64AsNumeric = FALSE)
-# 
-# sql <- "SELECT * FROM jmdc.cdm_jmdc_v3044.observation_period WHERE observation_period_id = 61650000001;"
-# sql <- "SELECT * FROM scratch.scratch_mschuemi.sccs_benchmark_nesting_JMDC WHERE subject_id = 212175;"
+  resultRows[[i]] <- resultRow
+  setTxtProgressBar(pb, i / nrow(ref))
+}
+close(pb)
+resultRows <- bind_rows(resultRows)
+resultRows <- resultRows |>
+  mutate(passAll = passPreExposure & passEndOfObservation & passTimeStability & passRareOutcome)
+saveRDS(resultRows, file.path(database$folder, "Diagnostics.rds"))
+mean(resultRows$passAll)
+
+# Copy to repo folder ----------------------------------------------------------
+database <- databases[dbi, ]
+writeLines(sprintf("*** Copying results for %s ***", database$name))
+estimates <- readr::read_csv(file.path(database$folder, "export", sprintf("estimates_SCCS_%s.csv", database$name)))
+diagnostics <- readRDS(file.path(database$folder, "Diagnostics.rds"))
+
+readr::write_csv(estimates, file.path("OhdsiBenchmark", sprintf("estimates_%s.csv", database$name)))
+readr::write_csv(diagnostics, file.path("OhdsiBenchmark", sprintf("diagnostics_%s.csv", database$name)))
