@@ -16,7 +16,6 @@ databases <- tibble(
            "FranceDa",
            "MDCD",
            "MDCR",
-           "Pharmetrics",
            "OptumDoD",
            "OptumEhr",
            "JMDC"),
@@ -25,7 +24,6 @@ databases <- tibble(
                         "iqvia_france.cdm_iqvia_france_v2914",
                         "merative_mdcd.cdm_merative_mdcd_v3038",
                         "merative_mdcr.cdm_merative_mdcr_v3045",
-                        "iqvia_pharmetrics.cdm_iqvia_pharmetrics_v3043",
                         "optum_extended_dod.cdm_optum_extended_dod_v3039",
                         "optum_ehr.cdm_optum_ehr_v3037",
                         "jmdc.cdm_jmdc_v3044")
@@ -81,7 +79,7 @@ DatabaseConnector::disconnect(connection)
 if (!file.exists(folder))
   dir.create(folder)
 
-connection <- DatabaseConnector::connect(connectionDetails)
+# connection <- DatabaseConnector::connect(connectionDetails)
 for (dbi in 1:nrow(databases)) {
   database <- databases[dbi, ]
   writeLines(sprintf("Creating SccsData objects in %s", database$name))
@@ -111,8 +109,8 @@ for (dbi in 1:nrow(databases)) {
     }
   }
 }
-DatabaseConnector::disconnect(connection)
-
+# DatabaseConnector::disconnect(connection)
+# row = rows[[4]]
 # Fit models and compute diagnostics -------------------------------------------
 fitAndSaveModel <- function(row, database, folder) {
   sccsDataFileName <- file.path(folder, sprintf("SccsData_e%d_o%d_%s.zip", row$targetId, row$outcomeId, database$name))
@@ -123,7 +121,7 @@ fitAndSaveModel <- function(row, database, folder) {
     studyPop <- createStudyPopulation(sccsData = sccsData,
                                       outcomeId = row$outcomeId,
                                       firstOutcomeOnly = row$firstOutcomeOnly,
-                                      naivePeriod = 180)
+                                      naivePeriod = 365)
     if (row$timeAtRisk == "28 days") {
       covTarget <- createEraCovariateSettings(label = "Exposure of interest",
                                               includeEraIds = row$targetId,
@@ -141,7 +139,7 @@ fitAndSaveModel <- function(row, database, folder) {
     }
     covPreTarget <- createEraCovariateSettings(label = "Pre-exposure",
                                                includeEraIds = row$targetId,
-                                               start = -60,
+                                               start = -30,
                                                end = -1,
                                                endAnchor = "era start")
     if (row$splines) {
@@ -173,9 +171,9 @@ fitAndSaveModel <- function(row, database, folder) {
     }
     if (!file.exists(diagnosticFileName)) {
       edo <- computeEventDependentObservation(sccsModel = model)
-      exposureStability <- computeExposureStability(sccsData = sccsData,
-                                                    studyPopulation = studyPop,
-                                                    exposureEraId = row$targetId)
+      # exposureStability <- computeExposureStability(sccsData = sccsData,
+      #                                               studyPopulation = studyPop,
+      #                                               exposureEraId = row$targetId)
       ede <- computeExposureChange(sccsData = sccsData,
                                    studyPopulation = studyPop,
                                    exposureEraId = row$targetId,
@@ -186,9 +184,9 @@ fitAndSaveModel <- function(row, database, folder) {
       # plotOutcomeCentered(sccsData = sccsData,
       #                     studyPopulation = studyPop,
       #                     exposureEraId = row$targetId)
-      preExposure <- computePreExposureGain(sccsData = sccsData,
-                                            studyPopulation = studyPop,
-                                            exposureEraId = row$targetId)
+      # preExposure <- computePreExposureGain(sccsData = sccsData,
+      #                                       studyPopulation = studyPop,
+      #                                       exposureEraId = row$targetId)
       # plotExposureCentered(sccsData = sccsData,
       #                      studyPopulation = studyPop,
       #                      exposureEraId = row$targetId)
@@ -217,53 +215,53 @@ fitAndSaveModel <- function(row, database, folder) {
                                                 firstOutcomeOnly = row$firstOutcomeOnly)
       
       # Create interaction term:
-      censoredCases <- sccsData$cases |>
-        filter(noninformativeEndCensor == 0) |>
-        distinct(caseId)
-      
-      interactionEras <- sccsData$eras |>
-        filter(eraId == row$targetId) |>
-        inner_join(censoredCases, join_by("caseId")) |>
-        mutate(eraId = 11)
-      writeLines(sprintf("Found %d censored cases having %d exposures", pull(count(censoredCases)), pull(count(interactionEras))))
-      
-      sccsData$eras <- union_all(
-        sccsData$eras,
-        interactionEras
-      ) |>
-        arrange(caseId, eraStartDay)
-      
-      covInteraction <- createEraCovariateSettings(label = "Interaction exposure x censoring",
-                                                   includeEraIds = 11,
-                                                   stratifyById = FALSE,
-                                                   start = 1,
-                                                   end = 0,
-                                                   endAnchor = "era end")
-      sccsIntervalDataWithInteraction <- createSccsIntervalData(studyPopulation = studyPop,
-                                                                sccsData = sccsData,
-                                                                seasonalityCovariateSettings = seasonalityCovariateSettings,
-                                                                calendarTimeCovariateSettings = calendarTimeCovariateSettings,
-                                                                eraCovariateSettings = list(covTarget, covPreTarget, covInteraction),
-                                                                endOfObservationEraLength = 0)
-      modelWithInteraction <- fitSccsModel(sccsIntervalDataWithInteraction, profileBounds = NULL)
-      if (modelWithInteraction$status != "OK") {
-        interactionEstimate <- tibble(logRr = NA, logLb95 = NA, logUb95 = NA) 
-      } else {
-        estimates <- modelWithInteraction$estimates
-        idx <- which(estimates$covariateId == 1002)
-        interactionEstimate <- tibble(logRr = estimates$logRr[idx],
-                                      logLb95 = estimates$logLb95[idx], 
-                                      logUb95 = estimates$logUb95[idx]) 
-      }
+      # censoredCases <- sccsData$cases |>
+      #   filter(noninformativeEndCensor == 0) |>
+      #   distinct(caseId)
+      # 
+      # interactionEras <- sccsData$eras |>
+      #   filter(eraId == row$targetId) |>
+      #   inner_join(censoredCases, join_by("caseId")) |>
+      #   mutate(eraId = 11)
+      # writeLines(sprintf("Found %d censored cases having %d exposures", pull(count(censoredCases)), pull(count(interactionEras))))
+      # 
+      # sccsData$eras <- union_all(
+      #   sccsData$eras,
+      #   interactionEras
+      # ) |>
+      #   arrange(caseId, eraStartDay)
+      # 
+      # covInteraction <- createEraCovariateSettings(label = "Interaction exposure x censoring",
+      #                                              includeEraIds = 11,
+      #                                              stratifyById = FALSE,
+      #                                              start = 1,
+      #                                              end = 0,
+      #                                              endAnchor = "era end")
+      # sccsIntervalDataWithInteraction <- createSccsIntervalData(studyPopulation = studyPop,
+      #                                                           sccsData = sccsData,
+      #                                                           seasonalityCovariateSettings = seasonalityCovariateSettings,
+      #                                                           calendarTimeCovariateSettings = calendarTimeCovariateSettings,
+      #                                                           eraCovariateSettings = list(covTarget, covPreTarget, covInteraction),
+      #                                                           endOfObservationEraLength = 0)
+      # modelWithInteraction <- fitSccsModel(sccsIntervalDataWithInteraction, profileBounds = NULL)
+      # if (modelWithInteraction$status != "OK") {
+      #   interactionEstimate <- tibble(logRr = NA, logLb95 = NA, logUb95 = NA) 
+      # } else {
+      #   estimates <- modelWithInteraction$estimates
+      #   idx <- which(estimates$covariateId == 1002)
+      #   interactionEstimate <- tibble(logRr = estimates$logRr[idx],
+      #                                 logLb95 = estimates$logLb95[idx], 
+      #                                 logUb95 = estimates$logUb95[idx]) 
+      # }
       
       # Combine diagnostics and store:
       diagnostics <- list(cases = min(model$metaData$attrition$outcomeSubjects),
                           edo = edo,
-                          exposureStability = exposureStability,
-                          interactionEstimate = interactionEstimate,
-                          ede = ede,
-                          ede2 = ede2,
-                          preExposure = preExposure,
+                          # exposureStability = exposureStability,
+                          # interactionEstimate = interactionEstimate,
+                          # ede = ede,
+                          # ede2 = ede2,
+                          # preExposure = preExposure,
                           preExposure2 = preExposure2,
                           timeTrend = timeTrend,
                           rareOutcome = rareOutcome)
@@ -272,7 +270,7 @@ fitAndSaveModel <- function(row, database, folder) {
   }
 }
 
-cluster <- ParallelLogger::makeCluster(8)
+cluster <- ParallelLogger::makeCluster(1)
 ParallelLogger::clusterRequire(cluster, "SelfControlledCaseSeries")
 for (dbi in 1:nrow(databases)) {
   database <- databases[dbi, ]
@@ -309,26 +307,26 @@ for (dbi in 1:nrow(databases)) {
     row$cases <- diagnostics$cases
     row$edoRatio <- diagnostics$edo$ratio
     row$edoP <- diagnostics$edo$p
-    if (length(diagnostics$exposureStability) == 1 && is.na(diagnostics$exposureStability)) {
-      row$edoExpStabRatio  <- NA
-      row$edoExpStabP  <- NA
-    } else {
-      row$edoExpStabRatio  <- diagnostics$exposureStability$ratio
-      row$edoExpStabP  <- diagnostics$exposureStability$p
-    }
-    if (nrow(diagnostics$interactionEstimate) == 0) {
-      row$edoInteractRatio <- NA
-      row$edoInteractLb <- NA
-      row$edoInteractUb <- NA
-    } else {
-      row$edoInteractRatio <- exp(diagnostics$interactionEstimate$logRr)
-      row$edoInteractLb <- exp(diagnostics$interactionEstimate$logLb95)
-      row$edoInteractUb <- exp(diagnostics$interactionEstimate$logUb95)
-    }
-    row$edeRatio <- diagnostics$ede$ratio
-    row$edeP <- diagnostics$ede$p
-    row$ede2Ratio <- diagnostics$ede2$ratio
-    row$ede2P <- diagnostics$ede2$p
+    # if (length(diagnostics$exposureStability) == 1 && is.na(diagnostics$exposureStability)) {
+    #   row$edoExpStabRatio  <- NA
+    #   row$edoExpStabP  <- NA
+    # } else {
+    #   row$edoExpStabRatio  <- diagnostics$exposureStability$ratio
+    #   row$edoExpStabP  <- diagnostics$exposureStability$p
+    # }
+    # if (nrow(diagnostics$interactionEstimate) == 0) {
+    #   row$edoInteractRatio <- NA
+    #   row$edoInteractLb <- NA
+    #   row$edoInteractUb <- NA
+    # } else {
+    #   row$edoInteractRatio <- exp(diagnostics$interactionEstimate$logRr)
+    #   row$edoInteractLb <- exp(diagnostics$interactionEstimate$logLb95)
+    #   row$edoInteractUb <- exp(diagnostics$interactionEstimate$logUb95)
+    # }
+    # row$edeRatio <- diagnostics$ede$ratio
+    # row$edeP <- diagnostics$ede$p
+    # row$ede2Ratio <- diagnostics$ede2$ratio
+    # row$ede2P <- diagnostics$ede2$p
     row$preExposureRatio <- diagnostics$preExposure$ratio
     row$preExposureP <- diagnostics$preExposure$p
     row$preExposure2Rr <- exp(diagnostics$preExposure2$logRr)

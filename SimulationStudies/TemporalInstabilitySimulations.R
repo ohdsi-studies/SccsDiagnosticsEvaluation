@@ -3,7 +3,7 @@ library(SelfControlledCaseSeries)
 # Define simulation scenarios ----------------------------------------------------------------------
 scenarios <- list()
 for (trueRr in c(1, 2, 4)) {
-  for (baseLineRate in c(0.001, 0.0001)) {
+  for (baseLineRate in c(0.0001)) {
     for (usageRateSlope in c(0, 0.00001, -0.00001)) {
       for (seasonality in c(TRUE, FALSE)) {
         for (calendarTime in c(TRUE, FALSE)) {
