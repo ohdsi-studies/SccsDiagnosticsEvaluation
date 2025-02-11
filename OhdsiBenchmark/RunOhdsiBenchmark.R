@@ -4,7 +4,7 @@ library(MethodEvaluation)
 library(SelfControlledCaseSeries)
 
 # Which database to run on this machine:
-dbi <- 5
+dbi <- 6
 
 # Overall settings -------------------------------------------------------------
 options(andromedaTempFolder = "e:/andromedaTemp")
@@ -23,7 +23,6 @@ databases <- tibble(
            "FranceDa",
            "MDCD",
            "MDCR",
-           "Pharmetrics",
            "OptumDoD",
            "OptumEhr",
            "JMDC"),
@@ -32,7 +31,6 @@ databases <- tibble(
                         "iqvia_france.cdm_iqvia_france_v2914",
                         "merative_mdcd.cdm_merative_mdcd_v3038",
                         "merative_mdcr.cdm_merative_mdcr_v3045",
-                        "iqvia_pharmetrics.cdm_iqvia_pharmetrics_v3043",
                         "optum_extended_dod.cdm_optum_extended_dod_v3039",
                         "optum_ehr.cdm_optum_ehr_v3037",
                         "jmdc.cdm_jmdc_v3044")
@@ -146,7 +144,7 @@ for (i in seq_len(nrow(allControls))) {
   )
   exposuresOutcomeList[[i]] <- exposuresOutcome
 }
-
+sccsMultiThreadingSettings$fitSccsModelThreads <- 2
 runSccsAnalyses(connectionDetails = connectionDetails,
                 cdmDatabaseSchema = database$cdmDatabaseSchema,
                 exposureDatabaseSchema = database$cdmDatabaseSchema,
@@ -201,6 +199,8 @@ for (i in seq_len(nrow(ref))) {
   refRow <- ref[i, ]
   model <- readRDS(file.path(database$folder, refRow$sccsModelFile))
   studyPop <- readRDS(file.path(database$folder, refRow$studyPopFile))
+  # sccsData <- loadSccsData(file.path(database$folder, refRow$sccsDataFile))
+  
   if (is.null(model$estimates) || !1001 %in% model$estimates$covariateId) {
     preExposure <- tibble(preExpLogRr = NA, preExpLogLb95 = NA, preExpLogUb95 = NA)
   } else {

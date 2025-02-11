@@ -7,7 +7,6 @@ databases <- tibble(
            "FranceDa",
            "MDCD",
            "MDCR",
-           "Pharmetrics",
            "OptumDoD",
            "OptumEhr",
            "JMDC")
