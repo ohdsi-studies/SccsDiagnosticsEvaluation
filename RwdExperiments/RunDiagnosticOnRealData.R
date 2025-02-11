@@ -270,7 +270,7 @@ fitAndSaveModel <- function(row, database, folder) {
   }
 }
 
-cluster <- ParallelLogger::makeCluster(1)
+cluster <- ParallelLogger::makeCluster(10)
 ParallelLogger::clusterRequire(cluster, "SelfControlledCaseSeries")
 for (dbi in 1:nrow(databases)) {
   database <- databases[dbi, ]
