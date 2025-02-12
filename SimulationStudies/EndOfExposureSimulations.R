@@ -254,6 +254,10 @@ for (i in seq_along(scenarios)) {
     results <- bind_rows(results)
     saveRDS(results, fileName)
   }
+  # Typo above. Correct
+  results$logRr <- log(results$logRr)
+  sysError <- EmpiricalCalibration::fitMcmcNull(logRr = results$logRr - log(scenario$trueRr),
+                                                seLogRr = (log(results$ci95Ub) - log(results$ci95Lb)) / (2*qnorm(0.975)))
   metrics <- results |>
     mutate(coverage = ci95Lb < scenario$trueRr & ci95Ub > scenario$trueRr,
            failDiagnostic = diagnosticP < 0.05,
@@ -265,7 +269,7 @@ for (i in seq_along(scenarios)) {
            failPreExposureUb125 = preExposureUb < 1/1.25,
            failPreExposureCount = preExposureCount == 0) |>
     summarise(coverage = mean(coverage, na.rm = TRUE),
-              bias = mean(logRr - log(scenario$trueRr), na.rm = TRUE),
+              crudeBias = mean(logRr - log(scenario$trueRr), na.rm = TRUE),
               meanDiagnosticRatio = exp(mean(log(diagnosticRatio), na.rm = TRUE)),
               fractionFailingDiagnostic = mean(failDiagnostic, na.rm = TRUE),
               meanDiagnostic2Ratio = exp(mean(log(diagnostic2Ratio), na.rm = TRUE)),
@@ -277,7 +281,8 @@ for (i in seq_along(scenarios)) {
               fractionFailingPreExposureLb125 = mean(failPreExposureLb125, na.rm = TRUE),
               fractionFailingPreExposureUb = mean(failPreExposureUb, na.rm = TRUE),
               fractionFailingPreExposureUb125 = mean(failPreExposureUb125, na.rm = TRUE),
-              fractionFailingPreExposure125 = mean(failPreExposureUb125 | failPreExposureLb125 | failPreExposureCount, na.rm = TRUE))
+              fractionFailingPreExposure125 = mean(failPreExposureUb125 | failPreExposureLb125 | failPreExposureCount, na.rm = TRUE)) |>
+    mutate(bias = sysError[1])
   # metrics
   row <- as_tibble(scenarioKey) |>
     bind_cols(metrics)
