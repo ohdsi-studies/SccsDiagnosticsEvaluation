@@ -99,12 +99,15 @@ for (i in seq_along(scenarios)) {
     results <- bind_rows(results)
     saveRDS(results, fileName)
   }
+  sysError <- EmpiricalCalibration::fitMcmcNull(logRr = results$logRr - log(scenario$trueRr),
+                                                seLogRr = (log(results$ci95Ub) - log(results$ci95Lb)) / (2*qnorm(0.975)))
   metrics <- results |>
     mutate(coverage = ci95Lb < scenario$trueRr & ci95Ub > scenario$trueRr) |>
     summarise(coverage = mean(coverage, na.rm = TRUE),
-              bias = mean(logRr - log(scenario$trueRr), na.rm = TRUE),
+              crudeBias = mean(logRr - log(scenario$trueRr), na.rm = TRUE),
               meanDiagnosticProportion = exp(mean(log(diagnosticProportion), na.rm = TRUE)),
-              fractionFailingDiagnostic = mean(!diagnosticPass, na.rm = TRUE))
+              fractionFailingDiagnostic = mean(!diagnosticPass, na.rm = TRUE)) |>
+    mutate(bias = sysError[1])
   row <- as_tibble(scenarioKey) |>
     bind_cols(metrics)
   rows[[length(rows) + 1]] <- row

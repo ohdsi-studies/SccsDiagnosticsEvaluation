@@ -51,10 +51,6 @@ writeLines(sprintf("Number of simulation scenarios: %d", length(scenarios)))
 # Run simulations ----------------------------------------------------------------------------------
 folder <- "e:/SccsEdoSimulations100"
 
-# x = bind_rows(lapply(scenarios, as.data.frame))
-# which(x$trueRr == 2 & x$baselineRate == 1e-4 & x$usageRateSlope == 0 & x$censorType == "None")
-scenario = scenarios[[70]]
-scenario
 simulateOne <- function(seed, scenario) {
   set.seed(seed)
   sccsData <- simulateSccsData(1000, scenario$settings)
@@ -216,6 +212,8 @@ for (i in seq_along(scenarios)) {
     results <- bind_rows(results)
     saveRDS(results, fileName)
   }
+  sysError <- EmpiricalCalibration::fitMcmcNull(logRr = results$logRr - log(scenario$trueRr),
+                                                seLogRr = (log(results$ci95Ub) - log(results$ci95Lb)) / (2*qnorm(0.975)))
   metrics <- results |>
     mutate(coverage = ci95Lb < scenario$trueRr & ci95Ub > scenario$trueRr,
            diagnosticEstimate = log(diagnosticEstimate),
@@ -223,13 +221,14 @@ for (i in seq_along(scenarios)) {
            failDiagnosticAndEs =  diagnosticP < 0.05 & exposureStabilityP < 0.05,
            failDiagnostic2 = diagnostic2Lb > 1.25 | diagnostic2Ub < 0.75) |>
     summarise(coverage = mean(coverage, na.rm = TRUE),
-              bias = mean(logRr - log(scenario$trueRr), na.rm = TRUE),
+              crudeBias = mean(logRr - log(scenario$trueRr), na.rm = TRUE),
               meanDiagnosticEstimate = exp(mean(diagnosticEstimate, na.rm = TRUE)),
               fractionFailingDiagnostic = mean(failDiagnostic, na.rm = TRUE),
               meanExposureStabilityEstimate = exp(mean(log(exposureStabilityEstimate), na.rm = TRUE)),
               fractionFailingDiagnosticAndEs = mean(failDiagnosticAndEs, na.rm = TRUE),
               meanDiagnostic2Estimate = exp(mean(log(diagnostic2Estimate), na.rm = TRUE)),
-              fractionFailingDiagnostic2= mean(failDiagnostic2, na.rm = TRUE))
+              fractionFailingDiagnostic2= mean(failDiagnostic2, na.rm = TRUE)) |>
+    mutate(bias = sysError[1])
   row <- as_tibble(scenarioKey) |>
     bind_cols(metrics)
   rows[[length(rows) + 1]] <- row

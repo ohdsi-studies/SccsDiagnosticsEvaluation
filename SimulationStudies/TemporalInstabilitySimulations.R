@@ -128,6 +128,10 @@ for (i in seq_along(scenarios)) {
     results <- bind_rows(results)
     saveRDS(results, fileName)
   }
+  sysErrorUnadj <- EmpiricalCalibration::fitMcmcNull(logRr = results$logRrUnadj - log(scenario$trueRr),
+                                                     seLogRr = (log(results$ci95UbUnadj) - log(results$ci95LbUnadj)) / (2*qnorm(0.975)))
+  sysErrorAdj <- EmpiricalCalibration::fitMcmcNull(logRr = results$logRrAdj - log(scenario$trueRr),
+                                                   seLogRr = (log(results$ci95UbAdj) - log(results$ci95LbAdj)) / (2*qnorm(0.975)))
   metrics <- results |>
     mutate(coverageUnadj = ci95LbUnadj < scenario$trueRr & ci95UbUnadj > scenario$trueRr,
            coverageAdj = ci95LbAdj < scenario$trueRr & ci95UbAdj > scenario$trueRr,
@@ -135,16 +139,18 @@ for (i in seq_along(scenarios)) {
            failDiagnosticUnadj = pUnadj < 0.05,
            diagnosticRatioAdj = ratioAdj,
            failDiagnosticAdj = pAdj < 0.05
-           ) |>
+    ) |>
     summarise(coverageUnadj = mean(coverageUnadj, na.rm = TRUE),
-              biasUnadj = mean(logRrUnadj - log(scenario$trueRr), na.rm = TRUE),
+              crudeBiasUnadj = mean(logRrUnadj - log(scenario$trueRr), na.rm = TRUE),
               coverageAdj = mean(coverageAdj, na.rm = TRUE),
-              biasAdj = mean(logRrAdj - log(scenario$trueRr), na.rm = TRUE),
+              crudeBbiasAdj = mean(logRrAdj - log(scenario$trueRr), na.rm = TRUE),
               meanDiagnosticRatioUnadj = exp(mean(log(diagnosticRatioUnadj), na.rm = TRUE)),
               fractionFailingDiagnosticUnadj = mean(failDiagnosticUnadj, na.rm = TRUE),
               meanDiagnosticRatioAdj = exp(mean(log(diagnosticRatioAdj), na.rm = TRUE)),
               fractionFailingDiagnosticAdj = mean(failDiagnosticAdj, na.rm = TRUE)
-    )
+    ) |>
+    mutate(biasUnadj = sysErrorUnadj[1]
+           ,      biasAdj = sysErrorAdj[1])
   row <- as_tibble(scenarioKey) |>
     bind_cols(metrics)
   rows[[length(rows) + 1]] <- row
