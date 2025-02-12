@@ -320,6 +320,8 @@ for (dbi in 1:nrow(databases)) {
     row$cases <- diagnostics$cases
     row$edoRatio <- diagnostics$edo$ratio
     row$edoP <- diagnostics$edo$p
+    row$edoLb <- exp(diagnostics$edoEstimate$logLb95)
+    row$edoUb <- exp(diagnostics$edoEstimate$logUb95)
     # if (length(diagnostics$exposureStability) == 1 && is.na(diagnostics$exposureStability)) {
     #   row$edoExpStabRatio  <- NA
     #   row$edoExpStabP  <- NA
