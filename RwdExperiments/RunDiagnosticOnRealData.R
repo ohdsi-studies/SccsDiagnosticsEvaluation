@@ -171,6 +171,18 @@ fitAndSaveModel <- function(row, database, folder) {
     }
     if (!file.exists(diagnosticFileName)) {
       edo <- computeEventDependentObservation(sccsModel = model)
+      
+      if (model$status != "OK" || !99 %in% model$estimates$covariateId) {
+        edoEstimate <- tibble(logRr = NA,
+                               logLb95 = NA,
+                               logUb95 = NA,
+                               count = NA)
+      } else {
+         edoEstimate <- model$estimates |>
+          filter(covariateId == 99) |>
+          select("logRr", "logLb95", "logUb95") 
+      }
+      
       # exposureStability <- computeExposureStability(sccsData = sccsData,
       #                                               studyPopulation = studyPop,
       #                                               exposureEraId = row$targetId)
@@ -257,6 +269,7 @@ fitAndSaveModel <- function(row, database, folder) {
       # Combine diagnostics and store:
       diagnostics <- list(cases = min(model$metaData$attrition$outcomeSubjects),
                           edo = edo,
+                          edoEstimate = edoEstimate,
                           # exposureStability = exposureStability,
                           # interactionEstimate = interactionEstimate,
                           # ede = ede,
