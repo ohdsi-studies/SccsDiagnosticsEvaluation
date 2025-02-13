@@ -46,9 +46,6 @@ writeLines(sprintf("Number of simulation scenarios: %d", length(scenarios)))
 # Run simulations ----------------------------------------------------------------------------------
 folder <- "e:/SccsTimeStabilitySimulations100"
 
-scenario = scenarios[[13]]
-scenario
-seed <- 9
 simulateOne <- function(seed, scenario) {
   set.seed(seed)
   sccsData <- simulateSccsData(1000, scenario$settings)
@@ -76,7 +73,8 @@ simulateOne <- function(seed, scenario) {
   model1 <- fitSccsModel(sccsIntervalData1, profileBounds = NULL)
   estimates1 <- model1$estimates
   idx1 <- which(estimates1$covariateId == 1000)
-  stability1 <- computeTimeStability(studyPop, model1)
+  stability1 <- computeTimeStability(studyPop, model1, maxRatio = 1.25)
+  stability1_110 <- computeTimeStability(studyPop, model1, maxRatio = 1.10)
   
   # Adjust for seasonality and calendar time:  
   sccsIntervalData2 <- createSccsIntervalData(studyPopulation = studyPop,
@@ -87,12 +85,13 @@ simulateOne <- function(seed, scenario) {
   model2 <- fitSccsModel(sccsIntervalData2, profileBounds = NULL)
   estimates2 <- model2$estimates
   idx2 <- which(estimates2$covariateId == 1000)
-  stability2 <- computeTimeStability(studyPop, model2)
+  stability2 <- computeTimeStability(studyPop, model2, maxRatio = 1.25)
+  stability2_110 <- computeTimeStability(studyPop, model2, maxRatio = 1.10)
+  
   if (length(idx2) == 0) {
     estimates2 <- tibble(logRr = NA, logLb95 = NA, logUb95 = NA)
     idx2 <- 1
   }
-  # plotEventToCalendarTime(studyPop, model2)
   
   row <- tibble(logRrUnadj = estimates1$logRr[idx1],
                 ci95LbUnadj = exp(estimates1$logLb95[idx1]),
@@ -102,8 +101,10 @@ simulateOne <- function(seed, scenario) {
                 ci95UbAdj = exp(estimates2$logUb95[idx2]),
                 ratioUnadj = stability1$ratio,
                 pUnadj = stability1$p,
+                pUnadj110 = stability1_110$p,
                 ratioAdj = stability2$ratio,
-                pAdj = stability2$p)
+                pAdj = stability2$p,
+                pAdj110 = stability2_110$p)
   return(row)
 }
 
@@ -137,8 +138,10 @@ for (i in seq_along(scenarios)) {
            coverageAdj = ci95LbAdj < scenario$trueRr & ci95UbAdj > scenario$trueRr,
            diagnosticRatioUnadj = ratioUnadj,
            failDiagnosticUnadj = pUnadj < 0.05,
+           failDiagnosticUnadj110 = pUnadj110 < 0.05,
            diagnosticRatioAdj = ratioAdj,
-           failDiagnosticAdj = pAdj < 0.05
+           failDiagnosticAdj = pAdj < 0.05,
+           failDiagnosticAdj110 = pAdj110 < 0.05
     ) |>
     summarise(coverageUnadj = mean(coverageUnadj, na.rm = TRUE),
               crudeBiasUnadj = mean(logRrUnadj - log(scenario$trueRr), na.rm = TRUE),
@@ -146,11 +149,13 @@ for (i in seq_along(scenarios)) {
               crudeBbiasAdj = mean(logRrAdj - log(scenario$trueRr), na.rm = TRUE),
               meanDiagnosticRatioUnadj = exp(mean(log(diagnosticRatioUnadj), na.rm = TRUE)),
               fractionFailingDiagnosticUnadj = mean(failDiagnosticUnadj, na.rm = TRUE),
+              fractionFailingDiagnosticUnadj110 = mean(failDiagnosticUnadj110, na.rm = TRUE),
               meanDiagnosticRatioAdj = exp(mean(log(diagnosticRatioAdj), na.rm = TRUE)),
-              fractionFailingDiagnosticAdj = mean(failDiagnosticAdj, na.rm = TRUE)
+              fractionFailingDiagnosticAdj = mean(failDiagnosticAdj, na.rm = TRUE),
+              fractionFailingDiagnosticAdj110 = mean(failDiagnosticAdj110, na.rm = TRUE)
     ) |>
-    mutate(biasUnadj = sysErrorUnadj[1]
-           ,      biasAdj = sysErrorAdj[1])
+    mutate(biasUnadj = sysErrorUnadj[1],
+           biasAdj = sysErrorAdj[1])
   row <- as_tibble(scenarioKey) |>
     bind_cols(metrics)
   rows[[length(rows) + 1]] <- row
