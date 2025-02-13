@@ -357,3 +357,18 @@ for (dbi in 1:nrow(databases)) {
 }
 results <- bind_rows(results)
 readr::write_csv(results, "RwdExperiments/Results.csv")
+
+# Extracting database descriptions from cdm_source table -----------------------
+library(DatabaseConnector)
+connection <- connect(connectionDetails)
+databaseDescriptions <- list()
+for (dbi in 1:nrow(databases)) {
+  database <- databases[dbi, ]
+  writeLines(sprintf("Extracting description from %s", database$name))
+  sql <- "SELECT cdm_source_name, source_description FROM @cdm_database_schema.cdm_source;"
+  cdmSource <- renderTranslateQuerySql(connection, sql, cdm_database_schema = database$cdmDatabaseSchema, snakeCaseToCamelCase = TRUE)  
+  databaseDescriptions[[dbi]] <- cdmSource
+}
+disconnect(connection)
+databaseDescriptions <- bind_rows(databaseDescriptions)
+readr::write_csv(databaseDescriptions, "RwdExperiments/DatabaseDescriptions.csv")
