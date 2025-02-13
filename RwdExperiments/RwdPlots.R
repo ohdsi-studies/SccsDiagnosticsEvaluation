@@ -95,7 +95,7 @@ plot1 <- ggplot(filter(vizData, diagnostic == "\nRare outcome"), aes(x = value, 
   geom_point(aes(color = pass), alpha = 0.75) +
   geom_errorbarh(aes(xmin = lb, xmax = ub, color = pass), alpha = 0.75) +
   geom_rect(xmin = -999, xmax = 999, ymin = 8.5, ymax = 11, fill = "white", color = "white") +
-  geom_text(aes(label = label), x = 0.5,  data = filter(toLabels, diagnostic == "\nRare outcome"), size = 3) +
+  geom_label(aes(label = label), x = 0.5,  data = filter(toLabels, diagnostic == "\nRare outcome"), size = 3, label.size = 0) +
   scale_x_continuous("Prevalence", breaks = c(0, 0.5, 1), labels = c("0", "0.5", "1")) +
   scale_y_continuous(breaks = databases$y[-9], labels = databases$database[-9]) +
   scale_color_manual(values = c("Pass" = "#336B91", "Fail" = "#EB6622")) +
@@ -113,7 +113,7 @@ plot2 <- ggplot(filter(vizData, diagnostic == "Event-exposure dep.:\nContra-indi
   geom_point(aes(color = pass), alpha = 0.75) +
   geom_errorbarh(aes(xmin = lb, xmax = ub, color = pass), alpha = 0.75) +
   geom_rect(xmin = -999, xmax = 999, ymin = 8.5, ymax = 11, fill = "white", color = "white") +
-  geom_text(aes(label = label), x = 0,  data = filter(toLabels, diagnostic == "Event-exposure dep.:\nContra-indication"), size = 3) +
+  geom_label(aes(label = label), x = 0,  data = filter(toLabels, diagnostic == "Event-exposure dep.:\nContra-indication"), size = 3, label.size = 0) +
   scale_x_log10("Pre-exposure IRR", breaks = c(0.25, 1, 4)) +
   scale_y_continuous(breaks = databases$y[-9], labels = databases$database[-9]) +
   scale_color_manual(values = c("Pass" = "#336B91", "Fail" = "#EB6622")) +
@@ -133,7 +133,7 @@ plot3 <- ggplot(filter(vizData, diagnostic == "Event-exposure dep.:\nReverse cau
   geom_point(aes(color = pass), alpha = 0.75) +
   geom_errorbarh(aes(xmin = lb, xmax = ub, color = pass), alpha = 0.75) +
   geom_rect(xmin = -999, xmax = 999, ymin = 8.5, ymax = 11, fill = "white", color = "white") +
-  geom_text(aes(label = label), x = 0,  data = filter(toLabels, diagnostic == "Event-exposure dep.:\nReverse causality"), size = 3) +
+  geom_label(aes(label = label), x = 0,  data = filter(toLabels, diagnostic == "Event-exposure dep.:\nReverse causality"), size = 3, label.size = 0) +
   scale_x_log10("Pre-exposure IRR", breaks = c(0.25, 1, 4)) +
   scale_y_continuous(breaks = databases$y[-9], labels = databases$database[-9]) +
   scale_color_manual(values = c("Pass" = "#336B91", "Fail" = "#EB6622")) +
@@ -153,7 +153,7 @@ plot4 <- ggplot(filter(vizData, diagnostic == "Event-observation dep.:\nFatal Ou
   geom_point(aes(color = pass), alpha = 0.75) +
   geom_errorbarh(aes(xmin = lb, xmax = ub, color = pass), alpha = 0.75) +
   geom_rect(xmin = -999, xmax = 999, ymin = 8.5, ymax = 11, fill = "white", color = "white") +
-  geom_text(aes(label = label), x = 0,  data = filter(toLabels, diagnostic == "Event-observation dep.:\nFatal Outcome"), size = 3) +
+  geom_label(aes(label = label), x = 0,  data = filter(toLabels, diagnostic == "Event-observation dep.:\nFatal Outcome"), size = 3, label.size = 0) +
   scale_x_log10("Observation end IRR", breaks = c(0.25, 1, 4, 10), labels = c("0.25", "1", "4", "≥10 .")) +
   scale_y_continuous(breaks = databases$y[-9], labels = databases$database[-9]) +
   scale_color_manual(values = c("Pass" = "#336B91", "Fail" = "#EB6622")) +
@@ -172,7 +172,7 @@ plot5 <- ggplot(filter(vizData, diagnostic == "Modeling assumptions:\nTemporal s
   geom_point(aes(color = pass), alpha = 0.75) +
   geom_errorbarh(aes(xmin = lb, xmax = ub, color = pass), alpha = 0.75) +
   geom_rect(xmin = -999, xmax = 999, ymin = 8.5, ymax = 11, fill = "white", color = "white") +
-  geom_text(aes(label = label), x = 0.5,  data = filter(toLabels, diagnostic == "Modeling assumptions:\nTemporal stability"), size = 3) +
+  geom_label(aes(label = label), x = 0.5,  data = filter(toLabels, diagnostic == "Modeling assumptions:\nTemporal stability"), size = 3, label.size = 0) +
   scale_x_continuous("Time stability P-value", breaks = c(0, 0.5, 1), labels = c("0", "0.5", "1")) +
   scale_y_continuous(breaks = databases$y[-9], labels = databases$database[-9]) +
   scale_color_manual(values = c("Pass" = "#336B91", "Fail" = "#EB6622")) +
