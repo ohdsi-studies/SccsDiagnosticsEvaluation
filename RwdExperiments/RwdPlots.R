@@ -1,189 +1,203 @@
 library(ggplot2)
+library(ggh4x)
+library(gridExtra)
+library(dplyr)
 
 folder <- "RwdExperiments"
 results <- readr::read_csv(file.path(folder, "Results.csv"))
 
-# Temporal stability -------------------------------------------------------------------------------
 vizData <- results |>
-  filter(diagnostic == "Temporal instability") |>
-  mutate(Diagnostic = if_else(timeTrendP < 0.05, "FAIL", "PASS"),
-         example = if_else(type == "Positive", "Flu vaccine - Allergic rhinitis", "Flu vaccine - NSCLC (splines)")) |>
-  mutate(database = factor(database, levels = sort(unique(results$database), decreasing = TRUE)))
+  mutate(outcomeName = if_else(outcomeName == "Non-small cell lung cancer (NSCLC)", "Lung cancer", outcomeName)) |>
+  mutate(outcomeName = if_else(outcomeName == "Sudden cardiac arrest or death", "S cardiac arrest or death", outcomeName)) |>
+  mutate(label = paste(targetName, outcomeName, sep = " -\n")) |>
+  mutate(database = case_when(
+    database == "AustraliaLpd" ~ "IQVIA LDP Australia",
+    database == "CCAE" ~ "Merative CCAE",
+    database == "FranceDa" ~ "IQVIA DA France",
+    database == "MDCD" ~ "Merative MDCD",
+    database == "MDCR" ~ "Merative MDCR",
+    database == "OptumDoD" ~ "Optum Clinformatics",
+    database == "OptumEhr" ~ "Optum EHR",
+    database == "JMDC" ~ "JMDC"
+  )) 
 
-vizData <- bind_rows(
-  vizData |>
-    mutate(metric = "Diagnostic p-value",
-           value = timeTrendP),
-  vizData |>
-    mutate(metric = "Diagnostic ratio",
-           value = timeTrendRatio)
-)
-
-guides <- bind_rows(
-  tibble(
-    metric = "Diagnostic p-value",
-    x = c(0, 0.05, 1),
-    lt = c("dashed", "solid", "dashed")
-  ),
-  tibble(
-    metric = "Diagnostic ratio",
-    x = c(0.5, 1, 2),
-    lt = c("solid", "dashed", "solid")
-  ),
-)
-ggplot(vizData, aes(x = value, y = database)) +
-  geom_point(aes(color = Diagnostic)) +
-  geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides, show.legend = FALSE) +
-  facet_grid(example ~ metric, scales = "free_x") +
-  theme(
-    axis.title = element_blank(),
-    axis.ticks.y = element_blank(),
-    panel.grid.minor = element_blank()
-  )
-
-ggsave(file.path(folder, "TemporalStabilityResults.png"), width = 7, height = 5)
-
- # Rare outcomes -----------------------------------------------------------------------------------
-vizData <- results |>
-  filter(diagnostic == "Rare disease") |>
-  mutate(Diagnostic = if_else(!rarePass, "FAIL", "PASS"),
-         example = if_else(type == "Positive", "Sertraline - Cough", "Sertraline - Rhabdomyolysis")) |>
-  mutate(database = factor(database, levels = sort(unique(results$database), decreasing = TRUE)))
+databases <- 
+  tibble(database = c(sort(unique(vizData$database), decreasing = TRUE), "")) |>
+  mutate(y = row_number())
 
 vizData <- vizData |>
-    mutate(metric = "Diagnostic ratio",
-           value = rareProportion)
-
-guides <- tibble(
-    metric = "Proportion",
-    x = c(0, 0.1, 1),
-    lt = c("solid", "dashed", "solid")
-)
-ggplot(vizData, aes(x = value, y = database)) +
-  geom_point(aes(color = Diagnostic)) +
-  geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides, show.legend = FALSE) +
-  facet_grid(example ~ .) +
-  theme(
-    axis.title = element_blank(),
-    axis.ticks.y = element_blank(),
-    panel.grid.minor = element_blank()
-  )
-
-ggsave(file.path(folder, "RareOutcomeResults.png"), width = 5, height = 5)
-
-# EDO -------------------------------------------------------------------------------
-vizData <- results |>
-  filter(grepl("Event-dependent observation - fatal", diagnostic)) |>
-  mutate(Diagnostic = if_else(edoP < 0.05, "FAIL", "PASS"),
-         example = paste(targetName, outcomeName, sep = " -\n")) |>
-  mutate(database = factor(database, levels = sort(unique(results$database), decreasing = TRUE)))
+  inner_join(databases, by = join_by(database))
 
 vizData <- bind_rows(
   vizData |>
-    mutate(metric = "Diagnostic p-value",
-           value = edoP),
+    filter(diagnostic == "Rare disease") |>
+    transmute(diagnostic = "\nRare outcome", 
+              type = type,
+              label = label,
+              y = y,
+              value = rareProportion,
+              lb = NA,
+              ub = NA,
+              pass = if_else(rarePass, "Pass", "Fail"),
+              valueLabel = "Proportion"),
   vizData |>
-    mutate(metric = "Diagnostic ratio",
-           value = edoRatio)
-)
-
-guides <- bind_rows(
-  tibble(
-    metric = "Diagnostic p-value",
-    x = c(0, 0.05, 1),
-    lt = c("dashed", "solid", "dashed")
-  ),
-  tibble(
-    metric = "Diagnostic ratio",
-    x = c(0.5, 1, 2),
-    lt = c("solid", "dashed", "solid")
-  ),
-)
-ggplot(vizData, aes(x = value, y = database)) +
-  geom_point(aes(color = Diagnostic)) +
-  geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides, show.legend = FALSE) +
-  facet_grid(example ~ metric, scales = "free_x") +
-  theme(
-    axis.title = element_blank(),
-    axis.ticks.y = element_blank(),
-    panel.grid.minor = element_blank()
-  )
-
-ggsave(file.path(folder, "EndOfObservationResults.png"), width = 7, height = 5)
-
-# EDE -------------------------------------------------------------------------------
-vizData <- results |>
-  filter(grepl("Permanent contra", diagnostic)) |>
-  mutate(Diagnostic = if_else(preExposure2Lb > 1.25 | preExposure2Ub < 1/1.25 | preExposure2Count == 0, "FAIL", "PASS"),
-         example = paste(targetName, outcomeName, sep = " - ")) |>
-  mutate(database = factor(database, levels = sort(unique(results$database), decreasing = TRUE)))
-
-vizData <- bind_rows(
+    filter(diagnostic == "Permanent contra-indication") |>
+    transmute(diagnostic = "Event-exposure dep.:\nContra-indication", 
+              type = type,
+              label = label,
+              y = y,
+              value = preExposure2Rr,
+              lb = preExposure2Lb,
+              ub = preExposure2Ub,
+              pass = if_else(preExposure2Lb > 1.25 |  preExposure2Ub < 0.8, "Fail", "Pass"),
+              valueLabel = "IRR"),
   vizData |>
-    mutate(metric = "Diagnostic ratio",
-           value = preExposure2Rr,
-           lb = preExposure2Lb,
-           ub = preExposure2Ub)
-)
-
-guides <- bind_rows(
-  tibble(
-    metric = "Diagnostic ratio",
-    x = c(1/1.25, 1, 1.25),
-    lt = c("solid", "dashed", "solid")
-  ),
-)
-ggplot(vizData, aes(x = value, y = database)) +
-  geom_point(aes(color = Diagnostic)) +
-  geom_errorbarh(aes(xmin = lb, xmax = ub, color = Diagnostic)) +
-  geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides, show.legend = FALSE) +
-  facet_grid(example ~ metric, scales = "free_x") +
-  scale_x_log10()+
-  coord_cartesian(xlim = c(0.25, 4)) +
-  theme(
-    axis.title = element_blank(),
-    axis.ticks.y = element_blank(),
-    panel.grid.minor = element_blank()
-  )
-
-ggsave(file.path(folder, "EndOfExposureResults.png"), width = 7, height = 5)
-
-
-
-# Reverse causality -----------------------------------------------------------------------------
-vizData <- results |>
-  filter(grepl("Reverse", diagnostic)) |>
-  mutate(Diagnostic = if_else(preExposure2Lb > 1.25 | preExposure2Ub < 1/1.25 | preExposure2Count == 0, "FAIL", "PASS"),
-         example = paste(targetName, outcomeName, sep = " - ")) |>
-  mutate(database = factor(database, levels = sort(unique(results$database), decreasing = TRUE)))
-
-vizData <- bind_rows(
+    filter(diagnostic == "Reverse causality") |>
+    transmute(diagnostic = "Event-exposure dep.:\nReverse causality", 
+              type = type,
+              label = label,
+              y = y,
+              value = preExposure2Rr,
+              lb = preExposure2Lb,
+              ub = preExposure2Ub,
+              pass = if_else(preExposure2Lb > 1.25 |  preExposure2Ub < 0.8, "Fail", "Pass"),
+              valueLabel = "IRR"),
   vizData |>
-    mutate(metric = "Diagnostic ratio",
-           value = preExposure2Rr,
-           lb = preExposure2Lb,
-           ub = preExposure2Ub)
+    filter(diagnostic == "Event-dependent observation - fatal outcome") |>
+    transmute(diagnostic = "Event-observation dep.:\nFatal Outcome", 
+              type = type,
+              label = label,
+              y = y,
+              value = pmin(10, edoRatio),
+              lb = edoLb,
+              ub = edoUb,
+              pass = if_else(edoP < 0.05, "Fail", "Pass"),
+              valueLabel = "P-value"),
+  vizData |>
+    filter(diagnostic == "Temporal instability") |>
+    transmute(diagnostic = "Modeling assumptions:\nTemporal stability", 
+              type = type,
+              label = label,
+              y = y,
+              value = timeTrendP,
+              lb = NA,
+              ub = NA,
+              pass = if_else(timeTrendP < 0.05, "Fail", "Pass"),
+              valueLabel = "P-value")
 )
+toLabels <- vizData |>
+  group_by(type, diagnostic, label) |>
+  ungroup() |>
+  mutate(y = 9.3, value = 0)
 
-guides <- bind_rows(
-  tibble(
-    metric = "Diagnostic ratio",
-    x = c(1/1.25, 1, 1.25),
-    lt = c("solid", "dashed", "solid")
-  ),
-)
-ggplot(vizData, aes(x = value, y = database)) +
-  geom_point(aes(color = Diagnostic)) +
-  geom_errorbarh(aes(xmin = lb, xmax = ub, color = Diagnostic)) +
-  geom_vline(aes(xintercept = x, linetype = lt), color = "gray", data = guides, show.legend = FALSE) +
-  facet_grid(example ~ metric, scales = "free_x") +
-  scale_x_log10()+
-  coord_cartesian(xlim = c(0.25, 4)) +
-  theme(
-    axis.title = element_blank(),
-    axis.ticks.y = element_blank(),
-    panel.grid.minor = element_blank()
-  )
+plot1 <- ggplot(filter(vizData, diagnostic == "\nRare outcome"), aes(x = value, y = y)) +
+  geom_vline(xintercept = 0.1, linetype = "dashed") +
+  geom_point(aes(color = pass), alpha = 0.75) +
+  geom_errorbarh(aes(xmin = lb, xmax = ub, color = pass), alpha = 0.75) +
+  geom_rect(xmin = -999, xmax = 999, ymin = 8.5, ymax = 11, fill = "white", color = "white") +
+  geom_text(aes(label = label), x = 0.5,  data = filter(toLabels, diagnostic == "\nRare outcome"), size = 3) +
+  scale_x_continuous("Prevalence", breaks = c(0, 0.5, 1), labels = c("0", "0.5", "1")) +
+  scale_y_continuous(breaks = databases$y[-9], labels = databases$database[-9]) +
+  scale_color_manual(values = c("Pass" = "#336B91", "Fail" = "#EB6622")) +
+  coord_cartesian(xlim = c(0, 1), ylim = c(1, 9.9)) +
+  facet_grid(type ~ diagnostic) +
+  theme(axis.title.y = element_blank(),
+        strip.text.y = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        plot.margin = unit(c(0.1, 0, 0.5, 0.1), "lines"))
 
-ggsave(file.path(folder, "ReverseCausalityResults.png"), width = 7, height = 5)
+plot2 <- ggplot(filter(vizData, diagnostic == "Event-exposure dep.:\nContra-indication"), aes(x = value, y = y)) +
+  geom_vline(xintercept = 1) +
+  geom_vline(xintercept = c(0.8, 1.25), linetype = "dashed") +
+  geom_point(aes(color = pass), alpha = 0.75) +
+  geom_errorbarh(aes(xmin = lb, xmax = ub, color = pass), alpha = 0.75) +
+  geom_rect(xmin = -999, xmax = 999, ymin = 8.5, ymax = 11, fill = "white", color = "white") +
+  geom_text(aes(label = label), x = 0,  data = filter(toLabels, diagnostic == "Event-exposure dep.:\nContra-indication"), size = 3) +
+  scale_x_log10("Pre-exposure IRR", breaks = c(0.25, 1, 4)) +
+  scale_y_continuous(breaks = databases$y[-9], labels = databases$database[-9]) +
+  scale_color_manual(values = c("Pass" = "#336B91", "Fail" = "#EB6622")) +
+  coord_cartesian(xlim = c(0.1, 10), ylim = c(1, 9.9)) +
+  facet_grid(type ~ diagnostic) +
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        strip.text.y = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        plot.margin = unit(c(0.1, 0, 0.5, 0.1), "lines"))
 
+plot3 <- ggplot(filter(vizData, diagnostic == "Event-exposure dep.:\nReverse causality"), aes(x = value, y = y)) +
+  geom_vline(xintercept = 1) +
+  geom_vline(xintercept = c(0.8, 1.25), linetype = "dashed") +
+  geom_point(aes(color = pass), alpha = 0.75) +
+  geom_errorbarh(aes(xmin = lb, xmax = ub, color = pass), alpha = 0.75) +
+  geom_rect(xmin = -999, xmax = 999, ymin = 8.5, ymax = 11, fill = "white", color = "white") +
+  geom_text(aes(label = label), x = 0,  data = filter(toLabels, diagnostic == "Event-exposure dep.:\nReverse causality"), size = 3) +
+  scale_x_log10("Pre-exposure IRR", breaks = c(0.25, 1, 4)) +
+  scale_y_continuous(breaks = databases$y[-9], labels = databases$database[-9]) +
+  scale_color_manual(values = c("Pass" = "#336B91", "Fail" = "#EB6622")) +
+  coord_cartesian(xlim = c(0.1, 10), ylim = c(1, 9.9)) +
+  facet_grid(type ~ diagnostic) +
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        strip.text.y = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        plot.margin = unit(c(0.1, 0, 0.5, 0.1), "lines"))
+
+plot4 <- ggplot(filter(vizData, diagnostic == "Event-observation dep.:\nFatal Outcome"), aes(x = value, y = y)) +
+  geom_vline(xintercept = 1) +
+  geom_vline(xintercept = c(0.5, 2.0), linetype = "dashed") +
+  geom_point(aes(color = pass), alpha = 0.75) +
+  geom_errorbarh(aes(xmin = lb, xmax = ub, color = pass), alpha = 0.75) +
+  geom_rect(xmin = -999, xmax = 999, ymin = 8.5, ymax = 11, fill = "white", color = "white") +
+  geom_text(aes(label = label), x = 0,  data = filter(toLabels, diagnostic == "Event-observation dep.:\nFatal Outcome"), size = 3) +
+  scale_x_log10("Observation end IRR", breaks = c(0.25, 1, 4, 10), labels = c("0.25", "1", "4", "≥10 .")) +
+  scale_y_continuous(breaks = databases$y[-9], labels = databases$database[-9]) +
+  scale_color_manual(values = c("Pass" = "#336B91", "Fail" = "#EB6622")) +
+  coord_cartesian(xlim = c(0.1, 10), ylim = c(1, 9.9)) +
+  facet_grid(type ~ diagnostic) +
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        strip.text.y = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        plot.margin = unit(c(0.1, 0, 0.5, 0.1), "lines"))
+
+plot5 <- ggplot(filter(vizData, diagnostic == "Modeling assumptions:\nTemporal stability"), aes(x = value, y = y)) +
+  geom_vline(xintercept = 0.05, linetype = "dashed") +
+  geom_point(aes(color = pass), alpha = 0.75) +
+  geom_errorbarh(aes(xmin = lb, xmax = ub, color = pass), alpha = 0.75) +
+  geom_rect(xmin = -999, xmax = 999, ymin = 8.5, ymax = 11, fill = "white", color = "white") +
+  geom_text(aes(label = label), x = 0.5,  data = filter(toLabels, diagnostic == "Modeling assumptions:\nTemporal stability"), size = 3) +
+  scale_x_continuous("Time stability P-value", breaks = c(0, 0.5, 1), labels = c("0", "0.5", "1")) +
+  scale_y_continuous(breaks = databases$y[-9], labels = databases$database[-9]) +
+  scale_color_manual(values = c("Pass" = "#336B91", "Fail" = "#EB6622")) +
+  coord_cartesian(xlim = c(0, 1), ylim = c(1, 9.9)) +
+  facet_grid(type ~ diagnostic) +
+  theme(axis.ticks.y = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_blank(),
+        panel.grid.minor = element_blank(),
+        legend.position = "none",
+        plot.margin = unit(c(0.1, 0, 0.5, 0.1), "lines"))
+
+legendPlot <- ggplot(vizData, aes(x = value, y = y)) +
+  geom_point(aes(color = pass)) +
+  scale_color_manual(values = c("Pass" = "#336B91", "Fail" = "#EB6622"), na.translate = FALSE) +
+  guides(color = guide_legend(title = "Diagnostic")) +
+  theme(legend.position = "bottom")
+get_legend<-function(myggplot){
+  tmp <- ggplot_gtable(ggplot_build(myggplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)
+}
+legend <- get_legend(legendPlot)
+plot <- gridExtra::grid.arrange(plot1, plot2, plot3, plot4, plot5, legend, ncol = 5, widths = c(170, 100, 100, 100, 120), heights = c(500, 20))
+
+ggsave(file.path(folder, "RwdPlots.png"), plot, width = 8.7, height = 5)
+ggsave(file.path(folder, "RwdPlots.svg"), plot, width = 8.7, height = 5)
