@@ -69,12 +69,6 @@ writeLines(sprintf("Number of simulation scenarios: %d", length(scenarios)))
 # Run simulations ----------------------------------------------------------------------------------
 folder <- "e:/SccsEdeSimulations100"
 
-
-# x = bind_rows(lapply(scenarios, as.data.frame))
-# which(x$trueRr == 2 & x$uniformAttributableRisk == TRUE & x$usageRateSlope == -1e-05 & x$censorType == "Permanent when exposed" & x$censorStrength == "Strong")
-scenario = scenarios[[69]]
-scenario
-
 simulateOne <- function(seed, scenario) {
   set.seed(seed)
   if (scenario$censorType == "Reverse causality") {
@@ -206,20 +200,15 @@ simulateOne <- function(seed, scenario) {
   
   model <- fitSccsModel(sccsIntervalData, profileBounds = NULL)
   estimates <- model$estimates
-  # estimates
-  # x <- sccsData$eras |> collect()
-  # studyPopulation = studyPop
   idx1 <- which(estimates$covariateId == 1000)
   idx2 <- which(estimates$covariateId == 1001)
   ede <- computeExposureChange(sccsData, studyPop, 1, ignoreExposureStarts = FALSE)
   ede2 <- computeExposureChange(sccsData, studyPop, 1, ignoreExposureStarts = TRUE)
-  # plotExposureCentered(studyPop, sccsData, 1)
-  # plotOutcomeCentered(studyPop, sccsData, 1)
   preExposure <- computePreExposureGain(sccsData, studyPop, 1)
   preExposureCount <- model$metaData$covariateStatistics |>
     filter(covariateId == 1001) |>
     pull(outcomeCount)
-  row <- tibble(logRr = exp(estimates$logRr[idx1]),
+  row <- tibble(logRr = estimates$logRr[idx1],
                 ci95Lb = exp(estimates$logLb95[idx1]),
                 ci95Ub = exp(estimates$logUb95[idx1]),
                 diagnosticRatio = ede$ratio,
@@ -254,8 +243,6 @@ for (i in seq_along(scenarios)) {
     results <- bind_rows(results)
     saveRDS(results, fileName)
   }
-  # Typo above. Correct
-  results$logRr <- log(results$logRr)
   sysError <- EmpiricalCalibration::fitMcmcNull(logRr = results$logRr - log(scenario$trueRr),
                                                 seLogRr = (log(results$ci95Ub) - log(results$ci95Lb)) / (2*qnorm(0.975)))
   metrics <- results |>
